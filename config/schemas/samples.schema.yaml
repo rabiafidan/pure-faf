@@ -1,25 +1,38 @@
 $schema: "https://json-schema.org/draft/2020-12/schema"
 description: entries for the sample sheet
 properties:
-  sample:
+  tumour_name:
     type: string
-    description: sample name/identifier
-  condition:
+    description: tumour sample name/identifier
+  normal_name:
     type: string
-    description: sample condition that will be compared during differential analysis
-  replicate:
+    description: matched normal sample name/identifier
+  Mutect2_vcf:
+    type: string
+    description: Path to Mutect2 vcf file
+  Strelka2_indel_vcf:
+    type: string
+    description: Path to Strelka2 vcf file
+  tumour_bam_cram:
+    type: string
+    description: Path to tumour bam or cram file
+  sequencing_read_length:
     type: integer
     default: 1
-    description: consecutive numbers representing multiple replicates of one condition
-  read1:
+    description: sequencing read length
+  sequencing_adapter_1:
     type: string
-    description: names of fastq.gz files, read 1
-  read2:
+    description: sequencing adapter 1
+  sequencing_adapter_2:
     type: string
-    description: names of fastq.gz files, read 2 (optional)
+    description: sequencing adapter 2
 
 required:
-  - sample
-  - condition
-  - replicate
-  - read1
+  - tumour_name
+  - normal_name
+  - Mutect2_vcf
+  - Strelka2_indel_vcf
+  - tumour_bam_cram
+  - sequencing_read_length
+  - sequencing_adapter_1
+  - sequencing_adapter_2

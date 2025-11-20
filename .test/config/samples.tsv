@@ -1,3 +1,2 @@
-sample	condition	replicate	read1	read2
-sample1	wild_type	1	sample1.bwa.read1.fastq.gz	sample1.bwa.read2.fastq.gz
-sample2	wild_type	2	sample2.bwa.read1.fastq.gz	sample2.bwa.read2.fastq.gz
+tumour_name	normal_name	Mutect2_vcf	Strelka2_indel_vcf	tumour_bam_cram	sequencing_read_length	sequencing_adapter_1	sequencing_adapter_2
+K1058_K1058_HB005_D02	K1058_K1058_BC001_D01	/nemo/project/proj-tracerX/working/CRENAL/fidanr/Mutect2/temp/or_flagged_K1058_HB005_D02.vcf.gz	/nemo/project/proj-tracerX/working/CRENAL/fidanr/Sarek/variant_calling/strelka/K1058_HB005_D02_vs_K1058_BC001_D01/K1058_HB005_D02_vs_K1058_BC001_D01.strelka.somatic_indels.vcf.gz	/nemo/project/proj-tracerX/working/CRENAL/fidanr/Sarek/preprocessing/recalibrated/K1058_HB005_D02/K1058_HB005_D02.recal.cram	300	AGCGAGAT-CCAGTATC	AGCGAGAT-CCAGTATC

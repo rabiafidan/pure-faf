@@ -1,0 +1,11 @@
+name: ffpe
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python
+  - scipy
+  - bcftools
+  - r-microseq
+  - bedtools

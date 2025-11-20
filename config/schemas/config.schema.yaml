@@ -4,26 +4,38 @@ properties:
   samplesheet:
     type: string
     description: path to sample-sheet TSV file
-
-  get_genome:
-    type: object
-    properties:
-      ncbi_ftp:
-        type: string
-        description: URL for genome retrieval
-    required: ["ncbi_ftp"]
-
-  simulate_reads:
-    type: object
-    properties:
-      read_length:
-        type: number
-        description: length of target reads in bp
-      read_number:
-        type: number
-        description: number of total reads to be simulated
+  ref_genome_version:
+    type: string
+    description: pick from Grch37 or Grch38, case insensitive
+  reference_genome_fasta:
+    type: string
+    description: Path to the human reference genome FASTA file that you used for alignment and variant calling
+  ROQ:
+    type: integer
+    description: Read orientation bias filtering ROQ threshold for Mutect2 variants
+  AD:
+    type: integer
+    description: AD filtering threshold for Mutect2 variants
+  PON_alpha:
+    type: float
+    description: significance level threshold for beta distribution testing
+  AD_tier_threshold:
+    type: integer
+    description: AD threshold for determining low-AD and high-AD variant tiers
+  pval_threshold_high_AD:
+    type: number
+    description: significance level threshold for microsec filtering of high AD tier variants
+  pval_threshold_low_AD:
+    type: number
+    description: significance level threshold for microsec filtering of low AD tier variants
 
 required:
   - samplesheet
-  - get_genome
-  - simulate_reads
+  - ref_genome_version
+  - reference_genome_fasta
+  - ROQ
+  - AD
+  - PON_alpha
+  - AD_tier_threshold
+  - pval_threshold_high_AD
+  - pval_threshold_low_AD
