@@ -1,5 +1,5 @@
 results/**
-resources/**
+#resources/**
 logs/**
 .snakemake
 .snakemake/**
@@ -10,3 +10,5 @@ workflow/notebooks/.ipynb_checkpoints/**
 **/.Rproj.user/**
 **/.RData
 **/Rplots.pdf
+.vep_cache
+.vep_cache/**

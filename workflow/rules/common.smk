@@ -25,10 +25,13 @@ validate(config, schema="../../config/schemas/config.schema.yaml")
 REF_GEN= config["reference_genome_fasta"]
 ROQ= config["ROQ"]
 AD= config["AD"]
+DP= config["DP"]
+VAF=config["VAF"]
 PON_ALPHA= config["PON_alpha"]
 AD_TIER=config["AD_tier"]
 MSEC_PVAL_LOW=config["pval_threshold_low_AD"]
 MSEC_PVAL_HIGH=config["pval_threshold_high_AD"]
+
 
 #set parameters based on reference genome version
 if config['ref_genome_version'].lower()=='grch37': 
@@ -125,6 +128,10 @@ def get_sequencing_adapter_1(wildcards):
 
 def get_sequencing_adapter_2(wildcards):
     return samples.at[wildcards.tum, "sequencing_adapter_2"]
+
+def get_chr(wildcards):
+    chr_status = "chr" if samples.at[wildcards.tum, "chr"] else "no_chr"
+    return chr_status
 
 def get_PON(wildcards):
     return samples.at[wildcards.tum, "PON"]

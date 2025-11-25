@@ -1,11 +1,12 @@
 samplesheet: ".test/config/samples.tsv"
 
-ref_genome_version: Grch38
+ref_genome_version: GRCh38
 reference_genome_fasta: /flask/reference/Genomics/aws-igenomes/Homo_sapiens/GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.fasta
 
 # VCF quality filter thresholds
 ROQ: 20
 AD: 4
+DP: 20
 
 # Beta test significance level
 PON_alpha: 0.05
@@ -14,3 +15,6 @@ PON_alpha: 0.05
 AD_tier_threshold: 10
 pval_threshold_high_AD: 1e-4
 pval_threshold_low_AD: 1e-6
+
+# post- filtering threshold
+VAF: 0.01

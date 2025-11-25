@@ -1,7 +1,4 @@
-# Main entrypoint of the workflow.
-# Please follow the best practices:
 # https://snakemake.readthedocs.io/en/stable/snakefiles/best_practices.html,
-# in particular regarding the standardized folder structure mentioned there.
 
 
 # load configuration
@@ -12,17 +9,17 @@ configfile: "config/config.yaml"
 # load rules
 # -----------------------------------------------------
 include: "rules/common.smk"
-include: "rules/process_reads.smk"
+
 
 
 # optional messages, log and error handling
 # -----------------------------------------------------
 onstart:
-    print("\n--- Analysis started ---\n")
+    print("\n--- pure-faf started ---\n")
 
 
 onsuccess:
-    print("\n--- Workflow finished! ---\n")
+    print("\n--- pure-faf finished! ---\n")
 
 
 onerror:
@@ -41,77 +38,82 @@ wildcard_constraints:
 # -----------------------------------------------------
 rule all:
     input:
-        "results/multiqc/multiqc_report.html",
+       "results/ffpe_sig/contribution_repaired_ffpe_sig.tsv",
+        "results/ffpe_sig/contribution_unrepaired_ffpe_sig.tsv",
+        "results/ffpe_sig/contribution_plot.pdf"
     default_target: True
 
-rule reorder_vcf:
 
-
-#    
+# Reorder Mutect2 vcf to have normal sample first, tumour sample secod
+# because some of the later steps depend on this order
 # -----------------------------------------------------
-rule vcf_index:
-    input:
-        'Mutect2/temp/or_flagged_{tum}.vcf.gz'
+rule reorder_Mutect2_vcf:
+    input:get_mutect2_vcf
     output:
-        'Mutect2/temp/or_flagged_{tum}.vcf.gz.tbi'
-    params:
-        err=lambda wildcards: wildcards.tum+".err",
-        out=lambda wildcards: wildcards.tum+".out"    
-    envmodules :
-        "BCFtools/1.12-GCC-10.2.0"
-    threads: 1
+        temp("results/temp/1-reordered_{tum}.vcf.gz"),
+        temp("results/temp/1-reordered_{tum}.vcf.gz.csi")
+    conda:
+        "envs/ffpe.yaml"
     resources:
-        mem_mb=4000
+        mem_mb=4000,
+        slurm_cpus_per_task=1
+    threads:1
+    params:
+        normal_name=get_normal_name
+    log:
+        "results/logs/1-reorder_{tum}.log"
     shell:
-        "tabix -p vcf {input}"
+        """
+        bcftools view -s {params.normal_name},{wildcards.tum} --write-index -Oz -o {output[0]} {input} > {log} 2>&1
+        """
 
+# Normalize vcf, fix a bug in vcf tag, and index the vcf
+# This is to ensure every line in the vcf has only one alt allele
 # -----------------------------------------------------
 rule vcf_normalise:
-    """
-    Normalize vcf, fix a bug in vcf tag, and index the vcf
-    #Step1 of filterAndMergeSingleSample_noGLrescue.sh
-    """
     input:
-        'Mutect2/temp/or_flagged_{tum}.vcf.gz.tbi',
-        v='Mutect2/temp/or_flagged_{tum}.vcf.gz'
+        "results/temp/1-reordered_{tum}.vcf.gz.csi",
+        v="results/temp/1-reordered_{tum}.vcf.gz"
     output:
-        v='Mutect2/temp/norm_{tum}.vcf.gz',
-        i='Mutect2/temp/norm_{tum}.vcf.gz.tbi'
-    params:
-        err=lambda wildcards: wildcards.tum+ ".err",
-        out=lambda wildcards: wildcards.tum+ ".out"    
-    threads: 1
+        v_temp=temp("results/temp/2-norm_{tum}.vcf"),
+        v=temp('results/temp/2-norm_{tum}.vcf.gz'),
+        i=temp('results/temp/2-norm_{tum}.vcf.gz.csi')
+    conda:
+        "envs/ffpe.yaml"
     resources:
-        mem_mb=10000
-    envmodules:
-        "HTSlib/1.15.1-GCC-11.3.0" 
+        mem_mb=4000,
+        slurm_cpus_per_task=1
+    threads:1 
+    log:
+        "results/logs/2-vcf_normalise_{tum}.log"
     shell:
         """
-        bcftools norm -m -any {input.v} | sed "s/##INFO=<ID=AS_FilterStatus,Number=A/##INFO=<ID=AS_FilterStatus,Number=1/" | bgzip > {output.v}
-        bcftools tabix {output.v}
+        bcftools norm -m -any {input.v} | sed "s/##INFO=<ID=AS_FilterStatus,Number=A/##INFO=<ID=AS_FilterStatus,Number=1/"  > {output.v_temp} > {log} 2>&1 && \
+        bcftools view --write-index -Oz -o {output.v} {output.v_temp} >> {log} 2>&1
         """
 
+# Annotate VCF files with BETA shape parameters from FFPE PON
 # -----------------------------------------------------
 rule pon_annotate:
     """
     Annotate vcf with FFPE PON
     """
     input:
-        v="Mutect2/temp/norm_{tum}.vcf.gz",
-        i="Mutect2/temp/norm_{tum}.vcf.gz.tbi",
-        header="/nemo/project/proj-tracerX/working/HoLST_F/ANALYSIS/create_pon/scripts/Assess_PON_betadist/annotateVCF/header.hdr",
-        pon=FFPE_PON
+        v='results/temp/2-norm_{tum}.vcf.gz',
+        i='results/temp/2-norm_{tum}.vcf.gz.csi',
+        header= "../resources/header.hdr",
+        pon=get_PON
     output:
-        v="Mutect2/FFPE_filtering/1-{tum}_PON_annotated.vcf.gz",
-        i="Mutect2/FFPE_filtering/1-{tum}_PON_annotated.vcf.gz.csi"
-    params:
-        err=lambda wildcards: wildcards.tum+ ".err",
-        out=lambda wildcards: wildcards.tum+ ".out"
-    threads: 1
+        v="results/PON/1-{tum}_PON_annotated.vcf.gz",
+        i="results/PON/1-{tum}_PON_annotated.vcf.gz.csi"
     resources:
-        mem_mb=10000
+        mem_mb=4000,
+        slurm_cpus_per_task=1
+    threads:1 
     conda:
         "envs/ffpe.yaml"
+    log:
+        "results/logs/3-pon_annotate_{tum}.log"
     shell:
         """
         bcftools annotate \
@@ -119,142 +121,139 @@ rule pon_annotate:
             -a {input.pon} \
             -c CHROM,FROM,TO,INFO/BETA,INFO/FRACTION \
             -h {input.header} \
-            {input.v} -Oz -o {output.v}
+            {input.v} -Oz -o {output.v} > {log} 2>&1
         """
+
+# test whether the allelic frequency of the alternate allele in the VCF fits
+# the distribution of the allelic frequencies in the PON
+# SAMPLE ORDER MATTERS
+# normal first, tumour second.
 # -----------------------------------------------------
-rule test_beta_dist:  ##########CHECK IF SAMPLE ORDER MATTERS ###YES IT DOES, CORRECT IT! ###### Currently it is normal first, tumour second.
-    """
-    This script takes a gzipped vcf which had been annotated with shape parameters from a PON as input 
-    and write a vcf which tests whether the allelic frequency of the alternate allele in the vcf fits 
-    the distribution of the allelic frequencies in the PON
-    """
+rule test_beta_dist: 
     input:
-        v="Mutect2/FFPE_filtering/1-{tum}_PON_annotated.vcf.gz",
-        i="Mutect2/FFPE_filtering/1-{tum}_PON_annotated.vcf.gz.csi"
+        v="results/PON/1-{tum}_PON_annotated.vcf.gz",
+        i="results/PON/1-{tum}_PON_annotated.vcf.gz.csi"
     output:
-        temp_v=temp("Mutect2/FFPE_filtering/2-{tum}_beta_dist_tested.vcf"),
-        v="Mutect2/FFPE_filtering/2-{tum}_beta_dist_tested.vcf.gz",
-        i="Mutect2/FFPE_filtering/2-{tum}_beta_dist_tested.vcf.gz.csi"
-    params:
-        err=lambda wildcards: wildcards.tum+ ".err",
-        out=lambda wildcards: wildcards.tum+ ".out"
-    threads: 1
+        temp_v=temp("results/PON/2-{tum}_beta_dist_tested.vcf"),
+        v="results/PON/2-{tum}_beta_dist_tested.vcf.gz",
+        i="results/PON/2-{tum}_beta_dist_tested.vcf.gz.csi"
     resources:
-        mem_mb=10000
+        mem_mb=4000,
+        slurm_cpus_per_task=1
+    threads:1 
     conda:
         "envs/ffpe.yaml"
+    log:
+        "results/logs/4-beta_dist_test_{tum}.log"
     shell:
         """
-        python /nemo/project/proj-tracerX/working/HoLST_F/ANALYSIS/create_pon/scripts/Assess_PON_betadist/test_pon_betadist_from_normal_first_tumour_second_vcf.py {input.v} {output.temp_v}
-        bcftools view  --write-index -Oz -o {output.v} {output.temp_v}
+        python ../scripts/test_pon_betadist_from_normal_first_tumour_second_vcf.py {input.v} {output.temp_v} > {log} 2>&1 && \
+        bcftools view  --write-index -Oz -o {output.v} {output.temp_v} > {log} 2>&1
         """
-####################################################### Currently it is normal first, tumour second.
+# Filter vcf based on quality metrics
+# Variants are kept if 
+#AD> <threshold> & ROQ>= <threshold> & DP> <threshold> & FILTER is PASS or clustered_events or on panel_of_normals & p_ADfit < <threshold>
 # -----------------------------------------------------
 rule qual_filter:
-    """
-    Filter vcf based on quality metrics
-    #Step2 of filterAndMergeSingleSample_noGLrescue.sh
-    #Variants are kept if AD> <threshold> & ROQ>= <threshold> & FILTER is PASS or clustered_events or on panel_of_normals & p_ADfit < 0.05
-
-    For now, it uses a set p_ADfit < 0.05
-    """
     input:
-        'Mutect2/FFPE_filtering/2-{tum}_beta_dist_tested.vcf.gz.csi',
-        v='Mutect2/FFPE_filtering/2-{tum}_beta_dist_tested.vcf.gz'
+        'results/PON/2-{tum}_beta_dist_tested.vcf.gz.csi',
+        v='results/PON/2-{tum}_beta_dist_tested.vcf.gz'
     output:
-        v='Mutect2/FFPE_filtering/3-filtered_{tum}.vcf.gz',
-        i='Mutect2/FFPE_filtering/3-filtered_{tum}.vcf.gz.csi'
+        v='results/PON/3-filtered_{tum}.vcf.gz',
+        i='results/PON/3-filtered_{tum}.vcf.gz.csi'
     params:
         AD=AD,
         ROQ=ROQ,
-        err=lambda wildcards: wildcards.tum+ ".err",
-        out=lambda wildcards: wildcards.tum+ ".out"    
-    envmodules :
-        "BCFtools/1.19-GCC-12.3.0"
-    threads: 1
-    resources:
-        mem_mb=10000
-    shell:
-        """
-        bcftools view --write-index \
-        -i '(FORMAT/DP[1]>20 && INFO/ROQ>{params.ROQ} && FMT/AD[1:1]>{params.AD}) && INFO/p_ADfit < 0.05 && (FILTER="PASS" || FILTER="clustered_events" || FILTER="panel_of_normals" || FILTER="clustered_events;panel_of_normals" || FILTER="panel_of_normals;clustered_events")' -Oz -o {output.v} {input.v}
-        """
-# -----------------------------------------------------
-rule split_snv_indel:
-    """
-    Split vcf into snvs and indels
-    Not used in the final workflow
-    """
-    input:
-        'Mutect2/FFPE_filtering/3-filtered_{tum}.vcf.gz.csi',
-        v='Mutect2/FFPE_filtering/3-filtered_{tum}.vcf.gz'
-    output:
-        s='Mutect2/FFPE_filtering/4-snv_high_AD_{tum}.vcf.gz',
-        i1='Mutect2/FFPE_filtering/4-snv_high_AD_{tum}.vcf.gz.csi',
-        s_low_AD='Mutect2/FFPE_filtering/4-snv_low_AD_{tum}.vcf.gz',
-        i0 ='Mutect2/FFPE_filtering/4-snv_low_AD_{tum}.vcf.gz.csi',
-        ind='Mutect2/FFPE_filtering/4-indel_high_AD_{tum}.vcf.gz',
-        i2='Mutect2/FFPE_filtering/4-indel_high_AD_{tum}.vcf.gz.csi',
-        ind_low_AD='Mutect2/FFPE_filtering/4-indel_low_AD_{tum}.vcf.gz',
-        i3='Mutect2/FFPE_filtering/4-indel_low_AD_{tum}.vcf.gz.csi'
-    params:
-        err=lambda wildcards: wildcards.tum+ ".err",
-        out=lambda wildcards: wildcards.tum+ ".out"    
+        PON_ALPHA=PON_ALPHA,
+        DP=DP
     conda:
         "envs/ffpe.yaml"
     threads: 1
     resources:
-        mem_mb=10000
+        mem_mb=4000,
+        slurm_cpus_per_task=1
+    log:
+        "results/logs/5-quality_filter_{tum}.log"
     shell:
         """
-        bcftools view --write-index -v snps -i 'FMT/AD[1:1]>=10' -Oz -o {output.s} {input.v}
-        bcftools view --write-index -v snps -i 'FMT/AD[1:1]<10' -Oz -o {output.s_low_AD} {input.v}
-        bcftools view --write-index -v indels -i 'FMT/AD[1:1]>=10' -Oz -o {output.ind} {input.v}
-        bcftools view --write-index -v indels -i 'FMT/AD[1:1]<10' -Oz -o {output.ind_low_AD} {input.v}
+        bcftools view --write-index \
+        -i '(FORMAT/DP[1]>{params.DP} && INFO/ROQ>{params.ROQ} && FMT/AD[1:1]>{params.AD}) && INFO/p_ADfit < {params.PON_ALPHA} && (FILTER="PASS" || FILTER="clustered_events" || FILTER="panel_of_normals" || FILTER="clustered_events;panel_of_normals" || FILTER="panel_of_normals;clustered_events")' \
+        -Oz -o {output.v} {input.v} > {log} 2>&1
         """
+
+# Split vcf into snvs and indels and tiers based on AD threshold
+# -----------------------------------------------------
+rule split_snv_indel:
+    input:
+        'results/PON/3-filtered_{tum}.vcf.gz.csi',
+        v='results/PON/3-filtered_{tum}.vcf.gz'
+    output:
+        s='results/temp/3-snv_high_AD_{tum}.vcf.gz',
+        i1='results/temp/3-snv_high_AD_{tum}.vcf.gz.csi',
+        s_low_AD='results/temp/3-snv_low_AD_{tum}.vcf.gz',
+        i0 ='results/temp/3-snv_low_AD_{tum}.vcf.gz.csi',
+        ind='results/temp/4-indel_high_AD_{tum}.vcf.gz',
+        i2='results/temp/4-indel_high_AD_{tum}.vcf.gz.csi',
+        ind_low_AD='results/temp/4-indel_low_AD_{tum}.vcf.gz',
+        i3='results/temp/4-indel_low_AD_{tum}.vcf.gz.csi'
+    params:
+        AD_TIER=AD_TIER
+    conda:
+        "envs/ffpe.yaml"
+    threads: 1
+    resources:
+        mem_mb=4000,
+        slurm_cpus_per_task=1
+    log:
+        "results/logs/6-split_snv_indel_{tum}.log"
+    shell:
+        """
+        bcftools view --write-index -v snps -i 'FMT/AD[1:1]>={params.AD_TIER}' -Oz -o {output.s} {input.v} > {log} 2>&1 && \
+        bcftools view --write-index -v snps -i 'FMT/AD[1:1]<{params.AD_TIER}' -Oz -o {output.s_low_AD} {input.v} >> {log} 2>&1 && \
+        bcftools view --write-index -v indels -i 'FMT/AD[1:1]>={params.AD_TIER}' -Oz -o {output.ind} {input.v} >> {log} 2>&1 && \
+        bcftools view --write-index -v indels -i 'FMT/AD[1:1]<{params.AD_TIER}' -Oz -o {output.ind_low_AD} {input.v} >> {log} 2>&1
+        """
+# Intersect low-AD indels with Strelka2 indels
+# Position-based intersection, requiring same type of mut (INS/DEL), no alt allele enforcement
 # -----------------------------------------------------
 rule indel_low_AD_strelka_intersection:
-    """
-    Keep Mutect2 low-AD indels that overlap a Strelka indel of the SAME TYPE (INS/DEL),
-    allowing different ALT sequence and different lengths.
-    """
     input:
-        ind_low_AD = "Mutect2/FFPE_filtering/4-indel_low_AD_{tum}.vcf.gz",
-        i3         = "Mutect2/FFPE_filtering/4-indel_low_AD_{tum}.vcf.gz.csi",
-        strelka_indel = get_strelka_path,
+        ind_low_AD = "results/temp/4-indel_low_AD_{tum}.vcf.gz",
+        i3         = "results/temp/4-indel_low_AD_{tum}.vcf.gz.csi",
+        strelka_indel = get_strelka_vcf,
         ref = REF_GEN
     output:
-        ind_low_AD_strelka = "Mutect2/FFPE_filtering/5-indel_low_AD_strelka_intersected_{tum}.vcf.gz",
-        i4                  = "Mutect2/FFPE_filtering/5-indel_low_AD_strelka_intersected_{tum}.vcf.gz.csi",
+        ind_low_AD_strelka = "results/temp/5-indel_low_AD_strelka_intersected_{tum}.vcf.gz",
+        i4                  = "results/temp/5-indel_low_AD_strelka_intersected_{tum}.vcf.gz.csi",
         # intermediates
-        m2_norm             = temp("Mutect2/FFPE_filtering/5-indel_low_AD_{tum}.norm.vcf.gz"),
-        m2_norm_csi         = temp("Mutect2/FFPE_filtering/5-indel_low_AD_{tum}.norm.vcf.gz.csi"),
-        st_norm             = temp("Mutect2/FFPE_filtering/5-strelka_{tum}.norm.vcf.gz"),
-        st_norm_csi         = temp("Mutect2/FFPE_filtering/5-strelka_{tum}.norm.vcf.gz.csi"),
-        m2_bed_uns          = temp("Mutect2/FFPE_filtering/5-indel_low_AD_{tum}.unsorted.bed"),
-        st_bed_uns          = temp("Mutect2/FFPE_filtering/5-strelka_{tum}.unsorted.bed"),
-        m2_bed              = temp("Mutect2/FFPE_filtering/5-indel_low_AD_{tum}.bed"),
-        st_bed              = temp("Mutect2/FFPE_filtering/5-strelka_{tum}.bed"),
-        match_bed           = "Mutect2/FFPE_filtering/5-indel_low_AD_strelka_{tum}.match.bed"
-    params:
-        err=lambda wc: wc.tum + ".err",
-        out=lambda wc: wc.tum + ".out"
+        m2_norm             = temp("results/temp/5-indel_low_AD_{tum}.norm.vcf.gz"),
+        m2_norm_csi         = temp("results/temp/5-indel_low_AD_{tum}.norm.vcf.gz.csi"),
+        st_norm             = temp("results/temp/5-strelka_{tum}.norm.vcf.gz"),
+        st_norm_csi         = temp("results/temp/5-strelka_{tum}.norm.vcf.gz.csi"),
+        m2_bed_uns          = temp("results/temp/5-indel_low_AD_{tum}.unsorted.bed"),
+        st_bed_uns          = temp("results/temp/5-strelka_{tum}.unsorted.bed"),
+        m2_bed              = temp("results/temp/5-indel_low_AD_{tum}.bed"),
+        st_bed              = temp("results/temp/5-strelka_{tum}.bed"),
+        match_bed           = "results/temp/5-indel_low_AD_strelka_{tum}.match.bed"
     conda:
         "envs/ffpe.yaml"
     threads: 8
     resources:
-        mem_mb=16000
+        mem_mb=16000,
+        slurm_cpus_per_task=8
+    log:
+        "results/logs/7-indel_low_AD_strelka_intersect_{tum}.log"
     shell:
         """
-        set -euo pipefail
-        export LC_ALL=C
+        set -euo pipefail 
+        export LC_ALL=C 
 
         # Ensure reference index exists
-        [ -s {input.ref}.fai ] || samtools faidx {input.ref}
+        [ -s {input.ref}.fai ] || samtools faidx {input.ref} >> {log} 2>&1 &&
 
         # 1) Normalize & split multiallelics (write index inline) with threads
-        bcftools norm --threads {threads} -f {input.ref} -m -any --write-index -Oz -o {output.m2_norm} {input.ind_low_AD}
-        bcftools norm --threads {threads} -f {input.ref} -m -any --write-index -Oz -o {output.st_norm} {input.strelka_indel}
+        bcftools norm --threads {threads} -f {input.ref} -m -any --write-index -Oz -o {output.m2_norm} {input.ind_low_AD} >> {log} 2>&1 &&
+        bcftools norm --threads {threads} -f {input.ref} -m -any --write-index -Oz -o {output.st_norm} {input.strelka_indel} >> {log} 2>&1 &&
 
         # 2) Extract INDELs to BED (VCF 1-based -> BED 0-based)
         bcftools query -i 'TYPE="indel"' -f '%CHROM\\t%POS\\t%REF\\t%ALT\\n' {output.m2_norm} \
@@ -262,123 +261,133 @@ rule indel_low_AD_strelka_intersection:
             lr=length($3); la=length($4);
             if(la>lr)      print $1, $2-1, $2, "INS";
             else if(lr>la) print $1, $2-1, $2-1+(lr-la), "DEL";
-        }}' > {output.m2_bed_uns}
+        }}' > {output.m2_bed_uns} >> {log} 2>&1 &&
 
         bcftools query -i 'TYPE="indel"' -f '%CHROM\\t%POS\\t%REF\\t%ALT\\n' {output.st_norm} \
         | awk 'BEGIN{{OFS="\\t"}}{{
             lr=length($3); la=length($4);
             if(la>lr)      print $1, $2-1, $2, "INS";
             else if(lr>la) print $1, $2-1, $2-1+(lr-la), "DEL";
-        }}' > {output.st_bed_uns}
+        }}' > {output.st_bed_uns} >> {log} 2>&1 &&
 
         # 2b) Sort BEDs once (numeric), then use bedtools -sorted
-        sort --parallel={threads} -S {resources.mem_mb}M -k1,1 -k2,2n {output.m2_bed_uns} > {output.m2_bed}
-        sort --parallel={threads} -S {resources.mem_mb}M -k1,1 -k2,2n {output.st_bed_uns} > {output.st_bed}
+        sort --parallel={threads} -S {resources.mem_mb}M -k1,1 -k2,2n {output.m2_bed_uns} > {output.m2_bed} >> {log} 2>&1 && 
+        sort --parallel={threads} -S {resources.mem_mb}M -k1,1 -k2,2n {output.st_bed_uns} > {output.st_bed} >> {log} 2>&1 &&
 
         # 3) Intersect and require SAME TYPE ONLY (faster with -sorted)
         bedtools intersect -sorted -a {output.m2_bed} -b {output.st_bed} -wa -wb \
         | awk 'BEGIN{{OFS="\\t"}} {{ if($4==$8) print $1,$2,$3 }}' \
-        | sort --parallel={threads} -S {resources.mem_mb}M -k1,1 -k2,2n -u > {output.match_bed}
+        | sort --parallel={threads} -S {resources.mem_mb}M -k1,1 -k2,2n -u > {output.match_bed} >> {log} 2>&1 &&
 
         # 4) Subset Mutect2 to matched regions
         if [ -s {output.match_bed} ]; then
           bcftools view --threads {threads} -R {output.match_bed} --write-index -Oz -o {output.ind_low_AD_strelka} {output.m2_norm}
         else
-          bcftools view --threads {threads} -h {output.m2_norm} --write-index -Oz -o {output.ind_low_AD_strelka}
-        fi
+          bcftools view --threads {threads} -h {output.m2_norm} --write-index -Oz -o {output.ind_low_AD_strelka} {output.m2_norm}
+        fi >> {log} 2>&1
         """
+
+#  Merge high-AD SNVs and INDELs.
 # -----------------------------------------------------
 rule merge_high_AD:
-    """
-    Merge high-AD SNVs and INDELs.
-    """
     input:
-        s='Mutect2/FFPE_filtering/4-snv_high_AD_{tum}.vcf.gz',
-        i1='Mutect2/FFPE_filtering/4-snv_high_AD_{tum}.vcf.gz.csi',
-        ind='Mutect2/FFPE_filtering/4-indel_high_AD_{tum}.vcf.gz',
-        i2='Mutect2/FFPE_filtering/4-indel_high_AD_{tum}.vcf.gz.csi'
+        s='results/temp/3-snv_high_AD_{tum}.vcf.gz',
+        i1='results/temp/3-snv_high_AD_{tum}.vcf.gz.csi',
+        ind='results/temp/4-indel_high_AD_{tum}.vcf.gz',
+        i2='results/temp/4-indel_high_AD_{tum}.vcf.gz.csi'
     output:
-        v='Mutect2/FFPE_filtering/6-high_AD_variants_{tum}.vcf.gz',
-        i='Mutect2/FFPE_filtering/6-high_AD_variants_{tum}.vcf.gz.csi'
-    params:
-        err=lambda wildcards: wildcards.tum+ ".err",
-        out=lambda wildcards: wildcards.tum+ ".out"
-    envmodules :
-        "BCFtools/1.19-GCC-12.3.0"
-    threads: 1
-    resources:
-        mem_mb=4000
-    shell:
-        """
-        bcftools concat  --write-index --allow-overlaps --rm-dups none -Oz -o {output.v} {input.s} {input.ind}
-        """
-
-use rule merge_high_AD as merge_low_AD with:
-    input:
-        s='Mutect2/FFPE_filtering/4-snv_low_AD_{tum}.vcf.gz',
-        i1='Mutect2/FFPE_filtering/4-snv_low_AD_{tum}.vcf.gz.csi',
-        ind='Mutect2/FFPE_filtering/5-indel_low_AD_strelka_intersected_{tum}.vcf.gz',
-        i2='Mutect2/FFPE_filtering/5-indel_low_AD_strelka_intersected_{tum}.vcf.gz.csi'
-    output:
-        v='Mutect2/FFPE_filtering/6-low_AD_variants_{tum}.vcf.gz',
-        i='Mutect2/FFPE_filtering/6-low_AD_variants_{tum}.vcf.gz.csi'
-
-# -----------------------------------------------------
-rule mutation_information_file:
-    """
-    Create mutation information file for Microsec
-    similar to /Volumes/TracerX/working/HoLST_F/ANALYSIS/MicroSEC/scripts/convert_mafs_v2.R
-    """
-    input:
-        v='Mutect2/FFPE_filtering/6-{AD_tier}_variants_{tum}.vcf.gz',
-        i='Mutect2/FFPE_filtering/6-{AD_tier}_variants_{tum}.vcf.gz.csi'
-    output:
-        "microsec/mutation_info_{AD_tier}_variants_{tum}.txt"
+        v='results/temp/6-high_AD_variants_{tum}.vcf.gz',
+        i='results/temp/6-high_AD_variants_{tum}.vcf.gz.csi'
     conda:
         "envs/ffpe.yaml"
     threads: 1
     resources:
-        mem_mb=5000
-    params:
-        patient=lambda wildcards: recal.loc[recal['SampleName']==wildcards.tum,'PatientName'].iloc[0]
+        mem_mb=4000,
+        slurm_cpus_per_task=1
+    log:
+        "results/logs/8-merge_high_AD_{tum}.log"
     shell:
         """
-        echo -e "Sample\\tMut_type\\tChr\\tPos\\tRef\\tAlt\\tSimpleRepeat_TRF\\tNeighborhood_sequence\\tpercent_Alt\\tsum_AD" > {output}
+        bcftools concat  --write-index --allow-overlaps --rm-dups none -Oz -o {output.v} {input.s} {input.ind} > {log} 2>&1
+        """
 
-        bcftools query -s {params.patient}_{wildcards.tum} -r "$(echo chr{{1..22}} chrX chrY | tr ' ' ',')" \
+#  Merge low-AD SNVs and strelaka- intersected INDELs.
+# -----------------------------------------------------
+use rule merge_high_AD as merge_low_AD with:
+    input:
+        s='results/temp/3-snv_low_AD_{tum}.vcf.gz',
+        i1='results/temp/3-snv_low_AD_{tum}.vcf.gz.csi',
+        ind='results/temp/5-indel_low_AD_strelka_intersected_{tum}.vcf.gz',
+        i2='results/temp/5-indel_low_AD_strelka_intersected_{tum}.vcf.gz.csi'
+    output:
+        v='results/temp/6-low_AD_variants_{tum}.vcf.gz',
+        i='results/temp/6-low_AD_variants_{tum}.vcf.gz.csi'
+    log:
+        "results/logs/9-merge_low_AD_{tum}.log"
+
+
+# Create mutation information file for Microsec 
+# -----------------------------------------------------
+rule mutation_information_file:
+    input:
+        v='results/temp/6-{AD_tier}_variants_{tum}.vcf.gz',
+        i='results/temp/6-{AD_tier}_variants_{tum}.vcf.gz.csi'
+    output:
+        "results/microsec_input/mutation_info_{AD_tier}_variants_{tum}.txt"
+    conda:
+        "envs/ffpe.yaml"
+    threads: 1
+    resources:
+        mem_mb=4000,
+        slurm_cpus_per_task=1
+    params:
+        chr=get_chr
+    log:
+        "results/logs/10-mutation_info_{AD_tier}_variants_{tum}.log"
+    shell:
+        """
+        if [ "{params.chr}" == "chr" ]; then
+            CHR="chr"
+        else
+            CHR=""
+        fi > {log} 2>&1 &&
+        
+        echo -e "Sample\\tMut_type\\tChr\\tPos\\tRef\\tAlt\\tSimpleRepeat_TRF\\tNeighborhood_sequence\\tpercent_Alt\\tsum_AD" > {output} >> {log} 2>&1 && 
+
+        bcftools query -s {wildcards.tum} -r "$(echo ${{CHR}}{{1..22}} ${{CHR}}X ${{CHR}}Y | tr ' ' ',')" \
         -f '%CHROM\\t%POS\\t%REF\\t%ALT\\t[%AD{{0}}\\t%AD{{1}}]\\n' {input.v} \
         | awk -v samp={wildcards.tum} '{{
         chr=$1; pos=$2; ref=$3; alt=$4; ad_r=$5; ad_a=$6;
         mut="-"; percent_alt=ad_a/(ad_r+ad_a)*100; sum_ad=ad_r+ad_a;
         print samp "\\t" mut "\\t" chr "\\t" pos "\\t" ref "\\t" alt "\\t-\\t-" "\\t" percent_alt "\\t" sum_ad
-        }}' >> {output}
+        }}' >> {output} >> {log} 2>&1
         """
+
+# Create sample information TSV for MicroSEC (File 3) with all 10 columns.
+#    Columns:
+#      [sample] [mutation_tsv] [bam] [readlen] [adapter1] [adapter2] [hg tag] [panel] [ref.fa] [simpleRepeat.bed(.gz)] 
 # -----------------------------------------------------
 rule sample_information_file:
-    """
-    Create sample information TSV for MicroSEC (File 3) with all 10 columns.
-    Columns:
-      [sample] [mutation_tsv] [bam] [readlen] [adapter1] [adapter2] [hg tag] [panel] [ref.fa] [simpleRepeat.bed(.gz)]
-    """
     input:
-        mif = "microsec/mutation_info_{AD_tier}_variants_{tum}.txt",
-        bam = get_tumour_bam,
-        bai = get_tumour_bai,        
+        mif = "results/microsec_input/mutation_info_{AD_tier}_variants_{tum}.txt",
+        bam = get_tumour_bam,        
         ref = REF_GEN,
-        simple_repeat = SIMPLE_REPEAT
+        simple_repeat = get_SR
     output:
-        "microsec/sample_info_{AD_tier}_variants_{tum}.txt"
+        "results/microsec_input/sample_info_{AD_tier}_variants_{tum}.txt"
     conda:
         "envs/ffpe.yaml"
     params:
-        read_length = config["read_length"],
-        adapter1 = lambda wc: get_adapter_sequences(wc)[0],
-        adapter2 = lambda wc: get_adapter_sequences(wc)[1],
-        genome = "hg38" if str(config["ref_gen"]).lower()=="grch38" else "hg19",
-        panel = config["target"]
+        read_length = get_sequencing_read_length,
+        adapter1 = get_sequencing_adapter_1,
+        adapter2 = get_sequencing_adapter_2,
+        genome = "hg38" if str(config["ref_genome_version"]).lower()=="grch38" else "hg19"
     threads: 1
     resources:
-        mem_mb = 5000
+        mem_mb = 5000,
+        slurm_cpus_per_task=1
+    log:
+        "results/logs/11-sample_info_{AD_tier}_variants_{tum}.log"
     shell:
         """
         printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
@@ -389,123 +398,151 @@ rule sample_information_file:
             {params.adapter1} \
             {params.adapter2} \
             {params.genome} \
-            {params.panel} \
+            custom_panel \
             {input.ref} \
             {input.simple_repeat} \
-            > {output}
+            > {output} >> {log} 2>&1
         """
+# run microsec for high AD variants
 # -----------------------------------------------------
 rule microsec_high_AD:
-    """
-    Run Microsec for high AD variants
-    """
     input:
-        sample_info="microsec/sample_info_high_AD_variants_{tum}.txt",
-        mutation_info="microsec/mutation_info_high_AD_variants_{tum}.txt"
+        sample_info="results/microsec_input/sample_info_high_AD_variants_{tum}.txt",
+        mutation_info="results/microsec_input/mutation_info_high_AD_variants_{tum}.txt"
     output:
-        "microsec/output/{tum}/high_AD/{tum}.tsv.gz"
+        "results/microsec_output/{tum}_high_AD.tsv.gz"
     container:
         "docker://ikegamitky/microsec:v2.1.6"
     threads: 4
     resources:
-        mem_mb=20000
+        mem_mb=20000,
+        slurm_cpus_per_task=4
     params:
         threshold_p=config["pval_threshold_high_AD"],
         mem_per_thread=lambda wildcards, threads, resources: int(resources.mem_mb / threads)
+    log:
+        "results/logs/12-microsec_high_AD_{tum}.log"
     shell:
         """
-        mkdir -p {output}
-        Rscript microsec/source/MicroSEC_parameterised2.R {output} $(realpath {input.sample_info}) Y {params.threshold_p} {threads} {params.mem_per_thread}
+        mkdir -p $(dirname {output}) > {log} 2>&1 &&
+        Rscript ../scripts/MicroSEC_parameterised2.R {output} $(realpath {input.sample_info}) Y {params.threshold_p} {threads} {params.mem_per_thread} >> {log} 2>&1
         """
+
+# run microsec for high AD variants
 # -----------------------------------------------------
 rule microsec_low_AD:
-    """
-    Run Microsec for low AD variants
-    """
     input:
-        sample_info="microsec/sample_info_low_AD_variants_{tum}.txt",
-        mutation_info="microsec/mutation_info_low_AD_variants_{tum}.txt"
+        sample_info="results/microsec_input/sample_info_low_AD_variants_{tum}.txt",
+        mutation_info="results/microsec_input/mutation_info_low_AD_variants_{tum}.txt"
     output:
-        "microsec/output/{tum}/low_AD/{tum}.tsv.gz"
+        "results/microsec_output/{tum}_low_AD.tsv.gz"
     container:
         "docker://ikegamitky/microsec:v2.1.6"
     threads: 4
     resources:
-        mem_mb=20000
+        mem_mb=20000,
+        slurm_cpus_per_task=4
     params:
         threshold_p=config["pval_threshold_low_AD"],
         mem_per_thread=lambda wildcards, threads, resources: int(resources.mem_mb / threads)
+    log:
+        "results/logs/13-microsec_low_AD_{tum}.log"
     shell:
         """
-        mkdir -p {output}
-        Rscript microsec/source/MicroSEC_parameterised2.R $(dirname {output}) $(realpath {input.sample_info}) Y {params.threshold_p} {threads} {params.mem_per_thread}
+        mkdir -p $(dirname {output}) > {log} 2>&1 &&
+        Rscript ../scripts/MicroSEC_parameterised2.R {output} $(realpath {input.sample_info}) Y {params.threshold_p} {threads} {params.mem_per_thread} >> {log} 2>&1
         """
+
+#  Annotate Mutect2 filtered VCF with Microsec results
 # -----------------------------------------------------
 rule microsec_annotate:
-    """
-    Annotate Mutect2 filtered VCF with Microsec results
-    """
     input:
-        v='Mutect2/FFPE_filtering/6-{AD_tier}_variants_{tum}.vcf.gz',
-        i='Mutect2/FFPE_filtering/6-{AD_tier}_variants_{tum}.vcf.gz.csi',
-        microsec="microsec/output/{tum}/{AD_tier}/{tum}.tsv.gz",
-        header="microsec/microsec_vcf_header.hdr"
+        v='results/temp/6-{AD_tier}_variants_{tum}.vcf.gz',
+        i='results/temp/6-{AD_tier}_variants_{tum}.vcf.gz.csi',
+        microsec="results/microsec_output/{tum}_{AD_tier}.tsv.gz",
+        header="../resources/microsec_vcf_header.hdr"
     output:
-        "microsec/output/{tum}/{AD_tier}/tmp/{tum}_modified_header.tsv.gz.tbi",
-        microsec_output_2="microsec/output/{tum}/{AD_tier}/tmp/{tum}_modified_header.tsv.gz",
-        v='Mutect2/FFPE_filtering/7-{AD_tier}_variants_{tum}_msec_annotated.vcf.gz',
-        i='Mutect2/FFPE_filtering/7-{AD_tier}_variants_{tum}_msec_annotated.vcf.gz.csi'
+        temp("results/microsec_output/{tum}_{AD_tier}_modified_header.tsv.gz.tbi"),
+        microsec_output_1=temp("results/microsec_output/{tum}_{AD_tier}_modified_header.tsv"),
+        microsec_output_2=temp("results/microsec_output/{tum}_{AD_tier}_modified_header.tsv.gz"),
+        v=temp("results/temp/7-{AD_tier}_variants_{tum}_msec_annotated.vcf.gz"),
+        i=temp("results/temp/7-{AD_tier}_variants_{tum}_msec_annotated.vcf.gz.csi")
     threads: 2
     resources:
-        mem_mb=10000
+        mem_mb=10000,
+        slurm_cpus_per_task=2
     conda:
         "envs/ffpe.yaml"
-    params:
-        microsec_output_1="microsec/output/{tum}/{AD_tier}/tmp/{tum}_modified_header.tsv"
+    log:
+        "results/logs/14-microsec_annotate_{AD_tier}_variants_{tum}.log"
     shell:
         """
-        zcat {input.microsec} | sed 's/Sample/#Sample/' >{params.microsec_output_1}
-        bgzip {params.microsec_output_1} 
-        tabix -f -s3 -b4 -e4 {output.microsec_output_2}
+        zcat {input.microsec} | sed 's/Sample/#Sample/' >{output.microsec_output_1} > {log} 2>&1 &&
+        bgzip -c {output.microsec_output_1} > {output.microsec_output_2} >> {log} 2>&1 &&
+        tabix -f -s3 -b4 -e4 {output.microsec_output_2} >> {log} 2>&1 &&
         bcftools annotate \
             --write-index --threads {threads} \
             -a {output.microsec_output_2} \
             -c -,-,CHROM,POS,-,-,-,-,-,-,-,-,msec_alt_AD,-,-,-,-,-,-,-,-,-,-,-,-,-,-,-,filter_1_mutation_intra_hairpin_loop,filter_2_hairpin_structure,filter_3_microhomology_induced_mutation,filter_4_highly_homologous_region,filter_5_soft_clipped_reads,filter_6_simple_repeat,filter_7_mutation_at_homopolymer,filter_8_low_quality,msec_filter_123,msec_filter_1234,msec_filter_all,- \
             -h {input.header} \
-            {input.v} -Oz -o {output.v}
+            {input.v} -Oz -o {output.v} >> {log} 2>&1
         """
+#     Merge high and low AD Microsec annotated VCFs
 # -----------------------------------------------------        
 rule AD_tiers_merge:
-    """
-    Merge high and low AD Microsec annotated VCFs
-    """
     input:
-        high_v='Mutect2/FFPE_filtering/7-high_AD_variants_{tum}_msec_annotated.vcf.gz',
-        high_i='Mutect2/FFPE_filtering/7-high_AD_variants_{tum}_msec_annotated.vcf.gz.csi',
-        low_v='Mutect2/FFPE_filtering/7-low_AD_variants_{tum}_msec_annotated.vcf.gz',
-        low_i='Mutect2/FFPE_filtering/7-low_AD_variants_{tum}_msec_annotated.vcf.gz.csi'
+        high_v='results/temp/7-high_AD_variants_{tum}_msec_annotated.vcf.gz',
+        high_i='results/temp/7-high_AD_variants_{tum}_msec_annotated.vcf.gz.csi',
+        low_v='results/temp/7-low_AD_variants_{tum}_msec_annotated.vcf.gz',
+        low_i='results/temp/7-low_AD_variants_{tum}_msec_annotated.vcf.gz.csi'
     output:
-        v='Mutect2/FFPE_filtering/8-{tum}_msec_annotated.vcf.gz',
-        i='Mutect2/FFPE_filtering/8-{tum}_msec_annotated.vcf.gz.csi'
+        v=temp('results/temp/8-{tum}_msec_annotated.vcf.gz'),
+        i=temp('results/temp/8-{tum}_msec_annotated.vcf.gz.csi')
     threads: 1
     resources:
-        mem_mb=10000
+        mem_mb=4000,
+        slurm_cpus_per_task=1
     conda:
         "envs/ffpe.yaml"
+    log:
+        "results/logs/15-AD_tiers_merge_{tum}.log"
     shell:
         """
-        bcftools concat  --write-index --allow-overlaps --rm-dups none -Oz -o {output.v} {input.high_v} {input.low_v}
+        bcftools concat  --write-index --allow-overlaps --rm-dups none -Oz -o {output.v} {input.high_v} {input.low_v} > {log} 2>&1
         """
+
+#  Download VEP cache
+# -----------------------------------------------------
+
+rule download_VEP_cache:
+    output:
+        directory(".vep_cache/homo_sapiens"),
+        ".vep_cache/download_complete.txt"
+    threads: 1
+    resources:
+        mem_mb=4000,
+        slurm_cpus_per_task=1
+    container:
+        "docker://ensemblorg/ensembl-vep"
+    log:
+        "results/logs/16-download_VEP_cache.log"
+    shell:
+        """
+        mkdir -p .vep_cache > {log} 2>&1 &&
+        INSTALL.pl -c .vep_cache -a cf -s homo_sapiens -y GRCh38 && 
+        INSTALL.pl -c .vep_cache -a cf -s homo_sapiens -y GRCh37 && 
+        echo "Download complete" > .vep_cache/download_complete.txt >> {log} 2>&1
+        """
+
+# Annotate VCF with VEP
 # -----------------------------------------------------
 rule VEP_annotate:
-    """
-    Annotate VCF with VEP
-    """
     input:
-        'Mutect2/FFPE_filtering/8-{tum}_msec_annotated.vcf.gz.csi',
-        v='Mutect2/FFPE_filtering/8-{tum}_msec_annotated.vcf.gz'
+        ".vep_cache/download_complete.txt",
+        'results/temp/8-{tum}_msec_annotated.vcf.gz.csi',
+        v='results/temp/8-{tum}_msec_annotated.vcf.gz'
     output:
-        v='Mutect2/FFPE_filtering/9-{tum}_msec_vep_annotated.vcf.gz'
+        v='results/temp/9-{tum}_msec_vep_annotated.vcf.gz'
     threads: 4
     resources:
         mem_mb=20000,
@@ -513,12 +550,11 @@ rule VEP_annotate:
     container:
         "docker://ensemblorg/ensembl-vep"
     params:
-        ncbi=config['ref_gen']
+        ncbi="GRCh38" if str(config["ref_genome_version"]).lower()=="grch38" else "GRCh37"
+    log:
+        "results/logs/17-VEP_annotate_{tum}.log"
     shell:
         """
-        #mkdir -p .vep_cache
-        #INSTALL.pl -c .vep_cache -a cf -s homo_sapiens -y GRCh38 #carry this bit to onstart 
-        #INSTALL.pl -c .vep_cache -a cf -s homo_sapiens -y GRCh37
         zcat {input.v} | vep \
         --input_file STDIN \
         --format vcf \
@@ -533,31 +569,37 @@ rule VEP_annotate:
         --total_length \
         --fork {threads} \
         --vcf \
-        --compress_output bgzip
+        --compress_output bgzip > {log} 2>&1
         """
+
+# filter VCF file based on Microsec annotations
 # -----------------------------------------------------
 rule msec_filter:
     """
     Apply Microsec filters to the annotated VCF
     """
     input:
-        v='Mutect2/FFPE_filtering/9-{tum}_msec_vep_annotated.vcf.gz'
+        v='results/temp/9-{tum}_msec_vep_annotated.vcf.gz'
     output:
-        'Mutect2/FFPE_filtering/9-{tum}_msec_vep_annotated.vcf.gz.csi',
-        'Mutect2/FFPE_filtering/10-vault_ffpe_filtered_{tum}.vcf.gz.csi',
-        'Mutect2/FFPE_filtering/10-vault_plus_SR_ffpe_filtered_{tum}.vcf.gz.csi',
-        'Mutect2/FFPE_filtering/10-msec_all_ffpe_filtered_{tum}.vcf.gz.csi',
-        v1='Mutect2/FFPE_filtering/10-vault_ffpe_filtered_{tum}.vcf.gz',
-        v2='Mutect2/FFPE_filtering/10-vault_plus_SR_ffpe_filtered_{tum}.vcf.gz',
-        v3='Mutect2/FFPE_filtering/10-msec_all_ffpe_filtered_{tum}.vcf.gz'
+        temp('results/temp/9-{tum}_msec_vep_annotated.vcf.gz.csi'),
+        temp('results/filtered_vcf/{tum}_vault_filtered_novaf.vcf.gz.csi'),
+        temp('results/filtered_vcf/{tum}_vault_plus_SR_filtered_novaf.vcf.gz.csi'),
+        temp('results/filtered_vcf/{tum}_msec_all_filtered_novaf.vcf.gz.csi'),
+        v1=temp('results/filtered_vcf/{tum}_vault_filtered_novaf.vcf.gz'),
+        v2=temp('results/filtered_vcf/{tum}_vault_plus_SR_filtered_novaf.vcf.gz'),
+        v3=temp('results/filtered_vcf/{tum}_msec_all_filtered_novaf.vcf.gz')
     threads: 1
     resources:
-        mem_mb=10000
+        mem_mb=4000,
+        slurm_cpus_per_task=1
     conda:
         "envs/ffpe.yaml"
+    log:
+        "results/logs/18-msec_filter_{tum}.log"
     shell:
         """
-        bcftools index {input.v}
+        bcftools index {input.v} > {log} 2>&1 &&
+
         bcftools view --write-index -i '(
             INFO/filter_7_mutation_at_homopolymer!="TRUE" &&
             INFO/msec_filter_123!="Artifact suspicious" &&
@@ -572,7 +614,7 @@ rule msec_filter:
             INFO/msec_filter_123=="Artifact suspicious" &&
             strlen(ALT) > strlen(REF) &&
             (FMT/AD[1:1] - INFO/msec_alt_AD) > 10
-          )' {input.v} -Oz -o {output.v1}
+          )' {input.v} -Oz -o {output.v1} >> {log} 2>&1 &&
 
         bcftools view --write-index -i '(
             INFO/filter_7_mutation_at_homopolymer!="TRUE" &&
@@ -590,11 +632,104 @@ rule msec_filter:
             INFO/msec_filter_123=="Artifact suspicious" &&
             strlen(ALT) > strlen(REF) &&
             (FMT/AD[1:1] - INFO/msec_alt_AD) > 10
-          )' {input.v} -Oz -o {output.v2}
+          )' {input.v} -Oz -o {output.v2} >> {log} 2>&1 &&
 
-        bcftools view --write-index -i 'INFO/msec_filter_all!="Artifact suspicious"' {input.v} -Oz -o {output.v3}
-            
+        bcftools view --write-index -i 'INFO/msec_filter_all!="Artifact suspicious"' {input.v} -Oz -o {output.v3} >> {log} 2>&1
         """
 
-
-
+ #  Add VAF tags to the VCF files. 
+ # -----------------------------------------------------
+rule fill_tags_VAF:
+    input:
+        'results/filtered_vcf/{tum}_vault_filtered_novaf.vcf.gz.csi',
+        'results/filtered_vcf/{tum}_vault_plus_SR_filtered_novaf.vcf.gz.csi',
+        'results/filtered_vcf/{tum}_msec_all_filtered_novaf.vcf.gz.csi'
+        v1='results/filtered_vcf/{tum}_vault_filtered_novaf.vcf.gz',
+        v2='results/filtered_vcf/{tum}_vault_plus_SR_filtered_novaf.vcf.gz',
+        v3='results/filtered_vcf/{tum}_msec_all_filtered_novaf.vcf.gz'
+    output:
+        'results/filtered_vcf/1-{tum}_vault_filtered.vcf.gz.csi',
+        'results/filtered_vcf/1-{tum}_vault_plus_SR_filtered.vcf.gz.csi',
+        'results/filtered_vcf/1-{tum}_msec_all_filtered.vcf.gz.csi',
+        v1='results/filtered_vcf/1-{tum}_vault_filtered.vcf.gz',
+        v2='results/filtered_vcf/1-{tum}_vault_plus_SR_filtered.vcf.gz',
+        v3='results/filtered_vcf/1-{tum}_msec_all_filtered.vcf.gz'
+    threads: 1      
+    resources:
+        mem_mb=4000,
+        slurm_cpus_per_task=1  
+    conda:
+        "envs/ffpe.yaml"
+    log:
+        "results/logs/19-fill_tags_VAF_{tum}.log"
+    shell:
+        """
+        bcftools +fill-tags {input.v1} --threads {threads} -Oz -o {output.v1} -- -t FORMAT/VAF > {log} 2>&1 &&
+        bcftools index --force --threads {threads} {output.v1} >> {log} 2>&1 &&
+        bcftools +fill-tags {input.v2} --threads {threads} -Oz -o {output.v2} -- -t FORMAT/VAF > {log} 2>&1 &&
+        bcftools index --force --threads {threads} {output.v2} >> {log} 2>&1 &&
+        bcftools +fill-tags {input.v3} --threads {threads} -Oz -o {output.v3} -- -t FORMAT/VAF > {log} 2>&1 &&
+        bcftools index --force --threads {threads} {output.v3} >> {log} 2>&1
+        """
+        
+# Filter based on VAF
+# -----------------------------------------------------        
+rule VAF_filter:
+    input:
+        'results/filtered_vcf/1-{tum}_vault_filtered.vcf.gz.csi',
+        'results/filtered_vcf/1-{tum}_vault_plus_SR_filtered.vcf.gz.csi',
+        'results/filtered_vcf/1-{tum}_msec_all_filtered.vcf.gz.csi',
+        v1='results/filtered_vcf/1-{tum}_vault_filtered.vcf.gz',
+        v2='results/filtered_vcf/1-{tum}_vault_plus_SR_filtered.vcf.gz',
+        v3='results/filtered_vcf/1-{tum}_msec_all_filtered.vcf.gz'
+    output:
+        'results/filtered_vcf/1-{tum}_vault_filtered_VAF_filtered.vcf.gz.csi',
+        'results/filtered_vcf/1-{tum}_vault_plus_SR_filtered_VAF_filtered.vcf.gz.csi',
+        'results/filtered_vcf/1-{tum}_msec_all_filtered_VAF_filtered.vcf.gz.csi',
+        v1='results/filtered_vcf/2-{tum}_vault_filtered_VAF_filtered.vcf.gz',
+        v2='results/filtered_vcf/2-{tum}_vault_plus_SR_filtered_VAF_filtered.vcf.gz',
+        v3='results/filtered_vcf/2-{tum}_msec_all_filtered_VAF_filtered.vcf.gz'
+    params:
+        VAF=VAF
+    threads: 1      
+    resources:
+        mem_mb=4000,
+        slurm_cpus_per_task=1
+    conda:
+        "envs/ffpe.yaml"
+    log:
+        "results/logs/20-VAF_filter_{tum}.log"
+    shell:
+        """
+        bcftools view --write-index --include 'VAF>{params.VAF}' {input.v1} -Oz -o {output.v1} > {log} 2>&1 &&
+        bcftools view --write-index --include 'VAF>{params.VAF}' {input.v2} -Oz -o {output.v2} >> {log} 2>&1 &&
+        bcftools view --write-index --include 'VAF>{params.VAF}' {input.v3} -Oz -o {output.v3} >> {log} 2>&1
+        """
+    
+rule ffpe_signature:
+    input:
+        unfiltered_vcf=expand("results/temp/2-norm_{tum}.vcf.gz", tum=samples["tumour_name"]),
+        qual_filtered_vcf=expand("results/PON/3-filtered_{tum}.vcf.gz", tum=samples["tumour_name"]),
+        vault_filtered_vcf=expand("results/filtered_vcf/1-{tum}_vault_filtered.vcf.gz", tum=samples["tumour_name"]),
+        vault_plus_SR_filtered_vcf=expand("results/filtered_vcf/1-{tum}_vault_plus_SR_filtered.vcf.gz", tum=samples["tumour_name"]),
+        msec_all_filtered_vcf=expand("results/filtered_vcf/1-{tum}_msec_all_filtered.vcf.gz", tum=samples["tumour_name"]),
+        VAF_filtered_vault_vcf=expand("results/filtered_vcf/2-{tum}_vault_filtered_VAF_filtered.vcf.gz", tum=samples["tumour_name"]),
+        VAF_filtered_vault_plus_SR_vcf=expand("results/filtered_vcf/2-{tum}_vault_plus_SR_filtered_VAF_filtered.vcf.gz", tum=samples["tumour_name"]),
+        VAF_filtered_msec_all_vcf=expand("results/filtered_vcf/2-{tum}_msec_all_filtered_VAF_filtered.vcf.gz", tum=samples["tumour_name"])
+    output:
+        repaired_table="results/ffpe_sig/contribution_repaired_ffpe_sig.tsv",
+        unrepaired_table="results/ffpe_sig/contribution_unrepaired_ffpe_sig.tsv",
+        plot="results/ffpe_sig/contribution_plot.pdf"
+    threads: 1      
+    resources:
+        mem_mb=4000,
+        slurm_cpus_per_task=1
+    params:
+        ref_genome=str(config["ref_genome_version"]).lower(),
+        sample_names=samples["tumour_name"].to_list()
+    conda:
+        "envs/ffpe.yaml"
+    log:
+        "results/logs/21-ffpe_signature.log"
+    script:
+        "scripts/ffpe_sig.R"

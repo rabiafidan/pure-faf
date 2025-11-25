@@ -9,3 +9,8 @@ dependencies:
   - bcftools
   - r-microseq
   - bedtools
+  - r-tidyverse
+  - bioconductor-mutationalpatterns
+  - bioconductor-bsgenome.hsapiens.ucsc.hg38
+  - bioconductor-bsgenome.hsapiens.ucsc.hg19
+  - r-pheatmap
