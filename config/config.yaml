@@ -11,10 +11,13 @@ DP: 20
 # Beta test significance level
 PON_alpha: 0.05
 
-# Microseq params
+# Microsec params
 AD_tier_threshold: 10
 pval_threshold_high_AD: 1e-4
 pval_threshold_low_AD: 1e-6
 
 # post- filtering threshold
-VAF: 0.01
+VAF: [0.01, 0.04, 0.05, 0.1]
+
+# Output directory name
+odir: run2

@@ -20,7 +20,7 @@ properties:
     type: integer
     description: DP filtering threshold for Mutect2 variants
   PON_alpha:
-    type: float
+    type: number
     description: significance level threshold for beta distribution testing
   AD_tier_threshold:
     type: integer
@@ -32,8 +32,13 @@ properties:
     type: number
     description: significance level threshold for microsec filtering of low AD tier variants
   VAF:
-    type: float
-    description: VAF filtering threshold for the formalin filtered variants
+    description: comma seperated list of VAF filtering threshold values you want to try for the formalin filtered variants
+    type: array
+    items:
+      type: number
+  odir:
+    type: string
+    description: output directory name under results/
 
 required:
   - samplesheet
@@ -47,3 +52,4 @@ required:
   - pval_threshold_high_AD
   - pval_threshold_low_AD
   - VAF
+  - odir

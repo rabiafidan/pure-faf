@@ -1,0 +1,10 @@
+name: bcftools
+channels:
+  - bioconda
+  - conda-forge
+  - nodefaults
+dependencies:
+  - bcftools
+  - tabix
+  - py-bgzip
+  - bedtools

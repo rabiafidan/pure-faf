@@ -1,0 +1,9 @@
+name: test_beta
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - python
+  - scipy
+  - bcftools

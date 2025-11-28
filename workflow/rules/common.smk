@@ -15,7 +15,9 @@ if not samples["tumour_name"].is_unique:
     print("Duplicated tumour_name entries:", list(dups))
     sys.exit(1)
 
-samples = samples.set_index("tumour_name")
+samples = samples.set_index("tumour_name", drop=False)
+config["pval_threshold_high_AD"]=float(config["pval_threshold_high_AD"])
+config["pval_threshold_low_AD"]=float(config["pval_threshold_low_AD"])
 
 # validate sample sheet and config file
 validate(samples, schema="../../config/schemas/samples.schema.yaml")
@@ -26,24 +28,25 @@ REF_GEN= config["reference_genome_fasta"]
 ROQ= config["ROQ"]
 AD= config["AD"]
 DP= config["DP"]
-VAF=config["VAF"]
+VAF= config["VAF"]
 PON_ALPHA= config["PON_alpha"]
-AD_TIER=config["AD_tier"]
+AD_TIER=config["AD_tier_threshold"]
 MSEC_PVAL_LOW=config["pval_threshold_low_AD"]
 MSEC_PVAL_HIGH=config["pval_threshold_high_AD"]
+ODIR= "results/" + config["odir"]
 
 
 #set parameters based on reference genome version
 if config['ref_genome_version'].lower()=='grch37': 
-    FFPE_PON= "../../resources/FFPE_PON_hg19.bed"
-    FFPE_PON_chr= "../../resources/FFPE_PON_hg19_chr.bed",
-    SR_BED= "../../resources/trf_simple_repeats_hg19.bed"
-    SR_BED_chr= "../../resources/trf_simple_repeats_hg19_chr.bed"
+    FFPE_PON= "resources/FFPE_PON_hg19.bed"
+    FFPE_PON_chr= "resources/FFPE_PON_hg19_chr.bed",
+    SR_BED= "resources/trf_simple_repeat_hg19.bed"
+    SR_BED_chr= "resources/trf_simple_repeat_hg19_chr.bed"
 elif config['ref_genome_version'].lower()=='grch38':
-    FFPE_PON= "../../resources/FFPE_PON_liftover_hg38.bed"
-    FFPE_PON_chr= "../../resources/FFPE_PON_liftover_hg38_chr.bed"
-    SR_BED= "../../resources/trf_simple_repeats_hg38.bed"
-    SR_BED_chr= "../../resources/trf_simple_repeats_hg38_chr.bed"
+    FFPE_PON= "resources/FFPE_PON_liftover_hg38.bed"
+    FFPE_PON_chr= "resources/FFPE_PON_liftover_hg38_chr.bed"
+    SR_BED= "resources/trf_simple_repeat_hg38.bed"
+    SR_BED_chr= "resources/trf_simple_repeat_hg38_chr.bed"
 
 
 def check_samples_in_vcf(vcf_path, tumour_sample, normal_sample):
