@@ -16,6 +16,10 @@ if not samples["tumour_name"].is_unique:
     sys.exit(1)
 
 samples = samples.set_index("tumour_name", drop=False)
+#exclude samples in the config exclude list
+if "exclude_samples" in config:
+    samples = samples[~samples["tumour_name"].isin(config["exclude_samples"])]
+    
 config["pval_threshold_high_AD"]=float(config["pval_threshold_high_AD"])
 config["pval_threshold_low_AD"]=float(config["pval_threshold_low_AD"])
 
@@ -142,5 +146,9 @@ def get_PON(wildcards):
 def get_SR(wildcards):
     return samples.at[wildcards.tum, "SR"]
 
+def bsgenome_prereq():
+    if config['ref_genome_version'].lower()=='grch37':
+        return ".Rlib/hg19_download_complete.txt"
+    return []
 
 

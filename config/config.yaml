@@ -2,11 +2,12 @@ samplesheet: ".test/config/samples.tsv"
 
 ref_genome_version: GRCh38
 reference_genome_fasta: /flask/reference/Genomics/aws-igenomes/Homo_sapiens/GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.fasta
+#/flask/reference/Genomics/aws-igenomes/Homo_sapiens/GATK/GRCh37/Sequence/WholeGenomeFasta/human_g1k_v37_decoy.fasta
 
 # VCF quality filter thresholds
 ROQ: 20
 AD: 4
-DP: 20
+DP: 0
 
 # Beta test significance level
 PON_alpha: 0.05
@@ -20,4 +21,7 @@ pval_threshold_low_AD: 1e-6
 VAF: [0.01, 0.04, 0.05, 0.1]
 
 # Output directory name
-odir: run2
+odir: run3
+
+#samples to exclude
+exclude_samples: []

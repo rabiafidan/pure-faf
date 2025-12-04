@@ -1,13 +1,13 @@
 # Snakemake workflow: `pure-faf`
 
 [![Snakemake](https://img.shields.io/badge/snakemake-≥8.0.0-brightgreen.svg)](https://snakemake.github.io)
-[![GitHub actions status](https://github.com/<owner>/<repo>/workflows/Tests/badge.svg?branch=main)](https://github.com/<owner>/<repo>/actions?query=branch%3Amain+workflow%3ATests)
+[![GitHub actions status](https://github.com/rabiafidan/pure-faf/workflows/Tests/badge.svg?branch=main)](https://github.com/rabiafidan/pure-faf/actions?query=branch%3Amain+workflow%3ATests)
 [![run with conda](http://img.shields.io/badge/run%20with-conda-3EB049?labelColor=000000&logo=anaconda)](https://docs.conda.io/en/latest/)
-[![workflow catalog](https://img.shields.io/badge/Snakemake%20workflow%20catalog-darkgreen)](https://snakemake.github.io/snakemake-workflow-catalog/docs/workflows/<owner>/<repo>)
+[![workflow catalog](https://img.shields.io/badge/Snakemake%20workflow%20catalog-darkgreen)](https://snakemake.github.io/snakemake-workflow-catalog/docs/workflows/rabiafidan/pure-faf)
 
-A Snakemake workflow for `formalin artefact filtering`
+A Snakemake workflow for `VCF purification through formalin artefact filtering`
 
-- [Snakemake workflow: `pure-faf`](#snakemake-workflow-name)
+- [Snakemake workflow: `pure-faf`](#pure-faf)
   - [Usage](#usage)
   - [Deployment options](#deployment-options)
   - [Authors](#authors)
@@ -16,7 +16,7 @@ A Snakemake workflow for `formalin artefact filtering`
 
 ## Usage
 
-The usage of this workflow is described in the [Snakemake Workflow Catalog](https://snakemake.github.io/snakemake-workflow-catalog/docs/workflows/<owner>/<repo>).
+The usage of this workflow is described in the [Snakemake Workflow Catalog](https://snakemake.github.io/snakemake-workflow-catalog/docs/workflows/rabiafidan/pure-faf).
 
 Detailed information about input data and workflow configuration can also be found in the [`config/README.md`](config/README.md).
 
@@ -24,10 +24,20 @@ If you use this workflow in a paper, don't forget to give credits to the authors
 
 ## Deployment options
 
+### Create a conda environment with snakemake and other dependencies
+
+```bash
+conda create --name pure-faf -c bioconda -c conda-forge -c defaults snakemake cyvcf2 snakemake-executor-plugin-slurm
+conda activate pure-faf
+```
+### clone the repository
+```bash
+
+```
 To run the workflow from command line, change the working directory.
 
 ```bash
-cd path/to/snakemake-workflow-name
+cd path/to/pure-faf
 ```
 
 Adjust options in the default config file `config/config.yaml`.
@@ -52,10 +62,21 @@ snakemake --cores 2 --sdm conda apptainer --directory .test
 
 ## Authors
 
-- Firstname Lastname
-  - Affiliation
-  - ORCID profile
-  - home page
+- Fatma Rabia Fidan Baş
+  - The Francis Crick Institute
+  - [ORCID profile](https://orcid.org/0000-0001-5877-7945)
+
+- Brian Hanley
+  - The Francis Crick Institute
+  - [ORCID profile](https://orcid.org/0000-0001-5877-7945)
+
+- Husayn Pallikonda
+  - The Francis Crick Institute
+  - [ORCID profile](https://orcid.org/0000-0001-5877-7945)
+
+-Irene Lobon 
+  - AstraZeneca
+  - [ORCID profile](https://orcid.org/0000-0003-1170-9915)
 
 ## References
 

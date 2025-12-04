@@ -1,4 +1,4 @@
-# MicroSEC_snakemake.R
+# MicroSEC_parameterised2.R
 #
 # MicroSEC: Microhomology-induced chimeric read-originating sequence
 #           error cleaning pipeline for FFPE samples
@@ -7,9 +7,9 @@
 #   - Uses snakemake@input, snakemake@output, snakemake@params, snakemake@threads.
 #   - Assumes a single sample in sample_info TSV.
 #   - Writes final .tsv.gz exactly to snakemake@output[["msec"]].
-#   - Creates tmp/ next to that output for intermediates.
+#   - Uses explicit tmp paths from snakemake@output (no tier guessing).
 #   - No setwd(), everything is absolute paths.
-#
+
 # Expected Snakemake interface:
 #   input:
 #     sample_info:  TSV with 1 row:
@@ -18,22 +18,38 @@
 #       V3: bam_or_cram
 #       V4: read_length
 #       V5: adapter_1
-#       V6+: optional organism/adapter_2/panel/reference_genome/simple_repeat_list (same logic as original)
+#       V6+: optional organism/adapter_2/panel/reference_genome/simple_repeat_list
 #   output:
-#     msec: final MicroSEC result .tsv.gz
+#     msec:      final MicroSEC result .tsv.gz
+#     slim_bam:  slim BAM (temp)
+#     slim_bai:  slim BAM index (temp)
+#     regions:   BED file with regions (temp)
 #   params:
 #     threshold_p:     numeric p-value threshold
-#     mem_per_thread: memory per thread in MB (e.g., 2000)
+#     mem_per_thread:  memory per thread in MB (e.g., 2000)
+#     tool_log:        (optional) path for MicroSEC-specific log (will be appended)
 #   threads:
 #     integer, passed to samtools and MicroSEC
 
-log <- file(snakemake@log[[1]], open = "at")
+# ----------------- Logging -----------------
+
+# Prefer an explicit tool_log param if present (so Snakemake's log: file can be disposable)
+if ("tool_log" %in% names(snakemake@params)) {
+  log_path <- snakemake@params[["tool_log"]]
+} else {
+  log_path <- snakemake@log[[1]]
+}
+
+dir.create(dirname(log_path), showWarnings = FALSE, recursive = TRUE)
+log <- file(log_path, open = "at")
 sink(log, append = TRUE)
 sink(log, type = "message", append = TRUE)
 message("-----------------------------------------------")
 message("-----------------------------------------------")
 message(date())
+
 ##############################################
+.libPaths(".Rlib")
 suppressPackageStartupMessages({
   library(MicroSEC)
   library(dplyr)
@@ -66,7 +82,7 @@ if ("mem_per_thread" %in% names(params_list)) {
   memory_per_thread <- "4000M"  # default 4GB if not set
 }
 
-# "wd" is only used for tmp placement next to the final output
+# "wd" is only used to sanity-check the final output directory
 wd <- dirname(out_path)
 if (!dir.exists(wd)) {
   stop(sprintf("Working/output directory does not exist: %s", wd))
@@ -120,16 +136,16 @@ if (exists("reference_genome")) {
   reference_genome <- normalizePath(reference_genome, mustWork = TRUE)
 }
 
-# ----------------- Paths for intermediates -----------------
+# ----------------- Paths for intermediates (from Snakemake outputs) -----------------
 
-tmp_dir <- file.path(wd, "tmp")
+bam_file_slim     <- normalizePath(snakemake@output[["slim_bam"]], mustWork = FALSE)
+bam_file_slim_bai <- normalizePath(snakemake@output[["slim_bai"]], mustWork = FALSE)
+bed_path          <- normalizePath(snakemake@output[["regions"]], mustWork = FALSE)
+
+tmp_dir <- dirname(bam_file_slim)
 if (!dir.exists(tmp_dir)) dir.create(tmp_dir, recursive = TRUE, showWarnings = FALSE)
 
-bam_file_slim     <- file.path(tmp_dir, paste0(sample_name, ".SLIM.bam"))
-bam_file_slim_bai <- paste0(bam_file_slim, ".bai")
-bed_path          <- file.path(tmp_dir, paste0(sample_name, ".regions.bed"))
-
-# ----------------- Genome & chromosome naming -----------------
+# ----------------- Genome & chromosome naming (MicroSEC/ref space) -----------------
 
 ref_genome <- fun_load_genome(organism)
 chr_no     <- fun_load_chr_no(organism)
@@ -155,7 +171,7 @@ df_mutation <- df_mutation %>%
   mutate(
     Sample = as.character(Sample),
     Mut_type = as.character(Mut_type),
-    Chr = as.character(Chr),
+    Chr = as.character(Chr),           # ref_genome space
     Pos = as.integer(Pos),
     Ref = as.character(Ref),
     Alt = as.character(Alt),
@@ -164,14 +180,43 @@ df_mutation <- df_mutation %>%
   ) %>%
   filter(!is.na(Pos), Pos > 0)
 
+# ----------------- Harmonise mutation chromosomes to BAM space (separate column) -----------------
+
+bam_targets <- names(Rsamtools::scanBamHeader(bam_file_in)[[1]]$targets)
+bam_has_chr <- any(grepl("^chr", bam_targets))
+ref_has_chr <- any(grepl("^chr", ref_genome@user_seqnames))
+
+df_mutation <- df_mutation %>%
+  mutate(
+    # Chr stays in ref_genome space for MicroSEC
+    Chr_bam = dplyr::case_when(
+      bam_has_chr && !ref_has_chr ~ ifelse(grepl("^chr", Chr), Chr, paste0("chr", Chr)),
+      !bam_has_chr && ref_has_chr ~ sub("^chr", "", Chr),
+      TRUE ~ Chr
+    )
+  )
+
+message(sprintf("[%s] BAM contigs example: %s",
+                sample_name,
+                paste(head(bam_targets, 5), collapse = ", ")))
+message(sprintf("[%s] Unique mutation chromosomes (ref space): %s",
+                sample_name,
+                paste(sort(unique(df_mutation$Chr)), collapse = ", ")))
+message(sprintf("[%s] Unique mutation chromosomes (BAM space): %s",
+                sample_name,
+                paste(sort(unique(df_mutation$Chr_bam)), collapse = ", ")))
+
 # ----------------- Build BED around mutations (±200; merge if next within 400bp) -----------------
 
 df_mutation_save <- df_mutation
 download_region <- data.frame(matrix(rep(NA,3), nrow=1))[numeric(0),]
 colnames(download_region) <- c("chrom","chromStart","chromEnd")
 
-for (i in chromosomes) {
-  df_chr <- df_mutation_save[df_mutation_save$Chr == i,]
+# Only chromosomes that exist both in BAM and in the mutations (BAM space)
+chromosomes_bam <- intersect(bam_targets, unique(df_mutation_save$Chr_bam))
+
+for (i in chromosomes_bam) {
+  df_chr <- df_mutation_save[df_mutation_save$Chr_bam == i, ]
   if (nrow(df_chr) == 0) next
   start <- max(1, df_chr$Pos[1] - 200)
   for (k in seq_len(nrow(df_chr))) {
@@ -229,15 +274,15 @@ run_cmd(sprintf("bash -lc 'set -euo pipefail; samtools index %s'", qpath(bam_fil
 
 df_bam <- fun_load_bam(bam_file_slim)
 
-# ----------------- Filter mutations to BAM contigs -----------------
+# ----------------- Filter mutations to BAM contigs (BAM space) -----------------
 
 targets <- names(Rsamtools::scanBamHeader(bam_file_slim)[[1]]$targets)
-missing_chr <- setdiff(unique(df_mutation$Chr), targets)
+missing_chr <- setdiff(unique(df_mutation$Chr_bam), targets)
 if (length(missing_chr) > 0) {
-  message(sprintf("[%s] Skipping contigs not in BAM: %s",
+  message(sprintf("[%s] Skipping contigs not in BAM (BAM space): %s",
                   sample_name, paste(missing_chr, collapse = ", ")))
 }
-df_mutation <- dplyr::filter(df_mutation, Chr %in% targets)
+df_mutation <- dplyr::filter(df_mutation, Chr_bam %in% targets)
 
 # If nothing left after subsetting, emit empty result and exit
 if (nrow(df_mutation) == 0) {
@@ -246,6 +291,11 @@ if (nrow(df_mutation) == 0) {
   writeLines("", con)  # empty gz file
   close(con)
   message(sprintf("MicroSEC finished successfully (empty result). Output: %s", out_path))
+  message(date())
+  message("-----------------------------------------------")
+  sink(type = "message")
+  sink()
+  close(log)
   q(save = "no", status = 0)
 }
 
@@ -295,3 +345,10 @@ msec <- fun_analysis(
 
 fun_save(msec, out_path)
 message(sprintf("MicroSEC finished successfully. Output: %s", out_path))
+message(date())
+message("-----------------------------------------------")
+
+# Close sinks and log file connection
+sink(type = "message")
+sink()
+close(log)

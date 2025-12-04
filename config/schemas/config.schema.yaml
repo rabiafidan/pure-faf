@@ -39,6 +39,11 @@ properties:
   odir:
     type: string
     description: output directory name under results/
+  exclude_samples:
+    description: comma seperated list of tumour samples to exclude from the sample sheet
+    type: array
+    items:
+      type: string
 
 required:
   - samplesheet

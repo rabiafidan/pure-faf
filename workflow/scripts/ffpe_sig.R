@@ -260,11 +260,22 @@ sim_unrepaired <- matrix(
 
 sim_repaired <- sim_unrepaired
 
+## store variant counts per step x sample
+variant_counts <- matrix(
+  NA_integer_,
+  nrow = n_steps,
+  ncol = n_samples,
+  dimnames = list(filter_steps, sample_names)
+)
+
 for (step_name in filter_steps) {
   mat_step <- mut_mats[[step_name]]  # 96 x samples
   
   # Total mutations per sample, to normalise columns
   total_muts_per_sample <- colSums(mat_step)
+  
+  # store counts for later use in the plot
+  variant_counts[step_name, ] <- total_muts_per_sample
   
   # Avoid division by zero: for samples with zero mutations, keep NA
   zero_cols <- total_muts_per_sample == 0
@@ -289,6 +300,31 @@ for (step_name in filter_steps) {
   sim_repaired[step_name, ]   <- sim_mat["FFPE_Repaired", ]
 }
 
+## build label matrices "cosine - #variants"
+numbers_unrepaired <- matrix(
+  NA_character_,
+  nrow = n_steps,
+  ncol = n_samples,
+  dimnames = dimnames(sim_unrepaired)
+)
+
+numbers_repaired <- numbers_unrepaired
+
+for (i in seq_len(n_steps)) {
+  for (j in seq_len(n_samples)) {
+    cs_u <- sim_unrepaired[i, j]
+    cs_r <- sim_repaired[i, j]
+    nvar <- variant_counts[i, j]
+    
+    if (!is.na(cs_u) && !is.na(nvar)) {
+      numbers_unrepaired[i, j] <- sprintf("%.2f (%d vars)", cs_u, as.integer(nvar))
+    }
+    if (!is.na(cs_r) && !is.na(nvar)) {
+      numbers_repaired[i, j] <- sprintf("%.2f (%d vars)", cs_r, as.integer(nvar))
+    }
+  }
+}
+
 ##############################################
 ## 8. HEATMAPS (ROWS = FILTERING STEPS, COLS = SAMPLES)
 ##    VALUES = COSINE SIMILARITY (0..1)
@@ -296,22 +332,22 @@ for (step_name in filter_steps) {
 
 h1 <- pheatmap(
   sim_unrepaired,
-  main            = "Cosine similarity to FFPE Unrepaired signature",
+  main            = "Cosine similarity to FFPE Unrepaired signature\n(labels: cosine - #variants)",
   cluster_rows    = FALSE,
   cluster_cols    = FALSE,
-  display_numbers = TRUE,
-  number_format   = "%.2f",
+  display_numbers = numbers_unrepaired,
+  number_color    = "black",
   color           = colorRampPalette(c("steelblue", "white", "indianred4"))(100),
   breaks          = seq(0, 1, length.out = 101)
 )
 
 h2 <- pheatmap(
   sim_repaired,
-  main            = "Cosine similarity to FFPE Repaired signature",
+  main            = "Cosine similarity to FFPE Repaired signature\n(labels: cosine - #variants)",
   cluster_rows    = FALSE,
   cluster_cols    = FALSE,
-  display_numbers = TRUE,
-  number_format   = "%.2f",
+  display_numbers = numbers_repaired,
+  number_color    = "black",
   color           = colorRampPalette(c("steelblue", "white", "indianred4"))(100),
   breaks          = seq(0, 1, length.out = 101)
 )
@@ -341,3 +377,8 @@ write.table(
   sep   = "\t",
   quote = FALSE
 )
+
+# Close sinks and log file connection
+sink(type = "message")
+sink()
+close(log)

@@ -196,7 +196,7 @@ rule qual_filter:
         echo "----------------------------------------------" >> {log} 2>&1 &&
         date >> {log} 2>&1 &&
         bcftools view --write-index \
-        -i '(FORMAT/DP[1]>{params.DP} && INFO/ROQ>{params.ROQ} && FMT/AD[1:1]>{params.AD}) && INFO/p_ADfit < {params.PON_ALPHA} && (FILTER="PASS" || FILTER="clustered_events" || FILTER="panel_of_normals" || FILTER="clustered_events;panel_of_normals" || FILTER="panel_of_normals;clustered_events")' \
+        -i '(FORMAT/DP[1]>{params.DP} && INFO/ROQ>={params.ROQ} && FMT/AD[1:1]>{params.AD}) && (INFO/p_ADfit < {params.PON_ALPHA} || INFO/p_ADfit = ".") && (FILTER="PASS" || FILTER="clustered_events" || FILTER="panel_of_normals" || FILTER="clustered_events;panel_of_normals" || FILTER="panel_of_normals;clustered_events")' \
         -Oz -o {output.v} {input.v} >> {log} 2>&1
         """
 
@@ -438,14 +438,49 @@ rule sample_information_file:
             {input.simple_repeat} \
             > {output} 2>> {log}
         """
+
+# intall BSgenome.Hsapiens.UCSC.hg19 because it's not included in the microsec singularity image
+# won't be run if reference genome is GRCh38
+# ------------------------------------------------------------------------------
+rule install_bsgenome_hg19:    
+    output: 
+        directory(".Rlib/BSgenome.Hsapiens.UCSC.hg19"),
+        ".Rlib/hg19_download_complete.txt"
+    container:
+        "docker://ikegamitky/microsec:v2.1.6"
+    threads: 2
+    resources:
+        mem_mb=8000,
+        slurm_cpus_per_task=4
+    log:
+        f"{ODIR}/logs/12.0_install_bsgenome_hg19.log"
+    shell:
+        """
+        echo "----------------------------------------------" >> {log} 2>&1 &&
+        echo "----------------------------------------------" >> {log} 2>&1 &&
+        date >> {log} 2>&1 &&
+
+        mkdir -p .Rlib
+        Rscript --vanilla -e '
+        .libPaths(".Rlib")
+        if (!requireNamespace("BSgenome.Hsapiens.UCSC.hg19", quietly = TRUE)) {{
+        BiocManager::install("BSgenome.Hsapiens.UCSC.hg19",ask = FALSE, update = FALSE, lib = ".Rlib")
+        }}' >> {log} 2>&1 &&
+        echo "h19_download_complete" | tee .Rlib/hg19_download_complete.txt >> {log} 2>&1
+        """
+
 # run microsec for high AD variants
 # -----------------------------------------------------
 rule microsec_high_AD:
     input:
+        bsgenome=bsgenome_prereq(),
         sample_info=f"{ODIR}/microsec_input/sample_info_high_AD_variants_{{tum}}.txt",
         mutation_info=f"{ODIR}/microsec_input/mutation_info_high_AD_variants_{{tum}}.txt"
     output:
-        msec=f"{ODIR}/microsec_output/{{tum}}_high_AD.tsv.gz"
+        msec=f"{ODIR}/microsec_output/{{tum}}_high_AD.tsv.gz",
+        slim_bam  = temp(f"{ODIR}/microsec_output/tmp/{{tum}}_high_AD/{{tum}}.SLIM.bam"),
+        slim_bai  = temp(f"{ODIR}/microsec_output/tmp/{{tum}}_high_AD/{{tum}}.SLIM.bam.bai"),
+        regions   = temp(f"{ODIR}/microsec_output/tmp/{{tum}}_high_AD/{{tum}}.regions.bed")
     container:
         "docker://ikegamitky/microsec:v2.1.6"
     threads: 4
@@ -464,10 +499,14 @@ rule microsec_high_AD:
 # -----------------------------------------------------
 rule microsec_low_AD:
     input:
+        bsgenome=bsgenome_prereq(),
         sample_info=f"{ODIR}/microsec_input/sample_info_low_AD_variants_{{tum}}.txt",
         mutation_info=f"{ODIR}/microsec_input/mutation_info_low_AD_variants_{{tum}}.txt"
     output:
-        msec=f"{ODIR}/microsec_output/{{tum}}_low_AD.tsv.gz"
+        msec=f"{ODIR}/microsec_output/{{tum}}_low_AD.tsv.gz",
+        slim_bam  = temp(f"{ODIR}/microsec_output/tmp/{{tum}}_low_AD/{{tum}}.SLIM.bam"),
+        slim_bai  = temp(f"{ODIR}/microsec_output/tmp/{{tum}}_low_AD/{{tum}}.SLIM.bam.bai"),
+        regions   = temp(f"{ODIR}/microsec_output/tmp/{{tum}}_low_AD/{{tum}}.regions.bed")
     container:
         "docker://ikegamitky/microsec:v2.1.6"
     threads: 4
@@ -491,7 +530,7 @@ rule microsec_annotate:
         microsec=f"{ODIR}/microsec_output/{{tum}}_{{AD_tier}}.tsv.gz",
         header="resources/microsec_vcf_header.hdr"
     output:
-        temp(f"{ODIR}/microsec_output/{{tum}}_{{AD_tier}}_modified_header.tsv.gz.tbi"),
+        tbi= temp(f"{ODIR}/microsec_output/{{tum}}_{{AD_tier}}_modified_header.tsv.gz.tbi"),
         microsec_output_1=temp(f"{ODIR}/microsec_output/{{tum}}_{{AD_tier}}_modified_header.tsv"),
         microsec_output_2=temp(f"{ODIR}/microsec_output/{{tum}}_{{AD_tier}}_modified_header.tsv.gz"),
         v=temp(f"{ODIR}/temp/7-{{AD_tier}}_variants_{{tum}}_msec_annotated.vcf.gz"),
@@ -510,7 +549,38 @@ rule microsec_annotate:
         echo "----------------------------------------------" >> {log} 2>&1 &&
         date >> {log} 2>&1 &&
 
-        zcat {input.microsec} | sed 's/Sample/#Sample/' >{output.microsec_output_1} 2>> {log} &&
+        # 1) Empty split VCF -> passthrough (already empty)
+        if [ "$(bcftools view -H {input.v} | head -n1 | wc -l)" -eq 0 ]; then
+            echo "[microsec_annotate] Split VCF is empty; passing through unchanged." >> {log} 2>&1
+
+            : > {output.microsec_output_1}
+            bgzip -c {output.microsec_output_1} > {output.microsec_output_2} 2>> {log} || true
+            touch {output.tbi}
+
+            cp {input.v} {output.v}
+            cp {input.i} {output.i}
+            exit 0
+        fi
+
+        # 2) MicroSEC empty but split VCF non-empty -> header-only VCF
+        if [ "$(zcat {input.microsec} | wc -l)" -eq 0 ]; then
+            echo "[microsec_annotate] MicroSEC result empty; emitting empty VCF." >> {log} 2>&1
+
+            : > {output.microsec_output_1}
+            bgzip -c {output.microsec_output_1} > {output.microsec_output_2} 2>> {log} || true
+            touch {output.tbi}
+
+            bcftools view -h {input.v} \
+              | bgzip -c > {output.v} 2>> {log}
+
+            bcftools index -f {output.v} >> {log} 2>&1
+            exit 0
+        fi
+
+        # 3) Normal path: annotate
+        echo "[microsec_annotate] Annotating VCF using MicroSEC output." >> {log} 2>&1
+
+        zcat {input.microsec} | sed 's/^Sample/#Sample/' > {output.microsec_output_1} 2>> {log} &&
         bgzip -c {output.microsec_output_1} > {output.microsec_output_2} 2>> {log} &&
         tabix -f -s3 -b4 -e4 {output.microsec_output_2} >> {log} 2>&1 &&
         bcftools annotate \
@@ -520,6 +590,7 @@ rule microsec_annotate:
             -h {input.header} \
             {input.v} -Oz -o {output.v} >> {log} 2>&1
         """
+
 #     Merge high and low AD Microsec annotated VCFs
 # -----------------------------------------------------        
 rule AD_tiers_merge:
@@ -554,7 +625,7 @@ rule AD_tiers_merge:
 rule download_VEP_cache:
     output:
         directory(".vep_cache/homo_sapiens"),
-        ".vep_cache/download_complete.txt"
+        ".vep_cache/download_complete_GRCh38.txt" if str(config["ref_genome_version"]).lower()=="grch38" else ".vep_cache/download_complete_GRCh37.txt"
     threads: 1
     resources:
         mem_mb=4000,
@@ -571,20 +642,24 @@ rule download_VEP_cache:
         echo "----------------------------------------------" >> {log} 2>&1 &&
         date >> {log} 2>&1 &&
 
-        mkdir -p .vep_cache >> {log} 2>&1 &&
+        #create cache directory if doesn't exist
+        if [ ! -d ".vep_cache" ]; then
+            mkdir -p .vep_cache >> {log} 2>&1
+        fi
         if [ "{params.ref_gen}" = "grch38" ]; then
             INSTALL.pl -c .vep_cache -a cf -s homo_sapiens -y GRCh38 >> {log} 2>&1
+            echo "Download complete GRCh38" | tee .vep_cache/download_complete_GRCh38.txt >> {log} 2>&1
         else
             INSTALL.pl -c .vep_cache -a cf -s homo_sapiens -y GRCh37 >> {log} 2>&1
-        fi &&
-        echo "Download complete" | tee .vep_cache/download_complete.txt >> {log} 2>&1
+            echo "Download complete GRCh37" | tee .vep_cache/download_complete_GRCh37.txt >> {log} 2>&1
+        fi         
         """
 
 # Annotate VCF with VEP
 # -----------------------------------------------------
 rule VEP_annotate:
     input:
-        ".vep_cache/download_complete.txt",
+        ".vep_cache/download_complete_GRCh38.txt" if str(config["ref_genome_version"]).lower()=="grch38" else ".vep_cache/download_complete_GRCh37.txt",
         f'{ODIR}/temp/8-{{tum}}_msec_annotated.vcf.gz.csi',
         v=f'{ODIR}/temp/8-{{tum}}_msec_annotated.vcf.gz'
     output:
@@ -766,7 +841,7 @@ rule VAF_filter:
     
 rule ffpe_signature:
     input:
-        unfiltered_vcf=expand(f"{ODIR}/temp/2-norm_{{tum}}.vcf.gz", tum=samples["tumour_name"]),
+        unfiltered_vcf=expand(f"{ODIR}/temp/1-reordered_{{tum}}.vcf.gz", tum=samples["tumour_name"]),
         qual_filtered_vcf=expand(f"{ODIR}/PON/3-filtered_{{tum}}.vcf.gz", tum=samples["tumour_name"]),
         vault_filtered_vcf=expand(f"{ODIR}/filtered_vcf/1-{{tum}}_vault_filtered.vcf.gz", tum=samples["tumour_name"]),
         vault_plus_SR_filtered_vcf=expand(f"{ODIR}/filtered_vcf/1-{{tum}}_vault_plus_SR_filtered.vcf.gz", tum=samples["tumour_name"]),
