@@ -7,6 +7,9 @@
 
 A Snakemake workflow for `VCF purification through formalin artefact filtering`
 
+<img width="2560" height="1440" alt="pure-faf_workflow" src="https://github.com/user-attachments/assets/c470b105-4ee2-48bd-a638-5fe70578a8bb" />
+
+
 - [Snakemake workflow: `pure-faf`](#pure-faf)
   - [Usage](#usage)
   - [Deployment options](#deployment-options)
