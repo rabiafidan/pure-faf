@@ -1,3 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://rabiafidan.github.io/pure-faf/</loc>
+         <lastmod>2025-12-05</lastmod>
+    </url>
+    <url>
+         <loc>https://rabiafidan.github.io/pure-faf/input/</loc>
+         <lastmod>2025-12-05</lastmod>
+    </url>
+    <url>
+         <loc>https://rabiafidan.github.io/pure-faf/output/</loc>
+         <lastmod>2025-12-05</lastmod>
+    </url>
+    <url>
+         <loc>https://rabiafidan.github.io/pure-faf/pure-faf-method/</loc>
+         <lastmod>2025-12-05</lastmod>
+    </url>
+    <url>
+         <loc>https://rabiafidan.github.io/pure-faf/usage/crick_usage/</loc>
+         <lastmod>2025-12-05</lastmod>
+    </url>
+    <url>
+         <loc>https://rabiafidan.github.io/pure-faf/usage/general_usage/</loc>
+         <lastmod>2025-12-05</lastmod>
+    </url>
+    <url>
+         <loc>https://rabiafidan.github.io/pure-faf/usage/turajlic_lab_usage/</loc>
+         <lastmod>2025-12-05</lastmod>
+    </url>
 </urlset>
