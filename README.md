@@ -24,15 +24,21 @@ If you use this workflow in a paper, don't forget to give credits to the authors
 
 ## Deployment options
 
-### Create a conda environment with snakemake and other dependencies
+### 0) Dependencies
+You need `snakemake`, `cyvcf2`, `conda` and `singularity` to run this workflow.
 
 ```bash
-conda create --name pure-faf -c bioconda -c conda-forge -c defaults snakemake cyvcf2 snakemake-executor-plugin-slurm
+conda create --name pure-faf -c conda-forge -c bioconda snakemake singularity cyvcf2
 conda activate pure-faf
 ```
-### clone the repository
-```bash
+If you are running this workflow on an HPC environment, make sure to also install the correct executor plugin. For example:
 
+```
+pip install snakemake-executor-plugin-slurm
+```
+### 1) clone the repository
+```bash
+https://github.com/rabiafidan/pure-faf.git
 ```
 To run the workflow from command line, change the working directory.
 
@@ -40,24 +46,19 @@ To run the workflow from command line, change the working directory.
 cd path/to/pure-faf
 ```
 
+## 2) configure the pipeline
 Adjust options in the default config file `config/config.yaml`.
+
+
 Before running the complete workflow, you can perform a dry run using:
 
 ```bash
 snakemake --dry-run
 ```
-
-To run the workflow with test files using **conda**:
-
-```bash
-snakemake --cores 2 --sdm conda --directory .test
-```
-
-To run the workflow with **apptainer** / **singularity**, add a link to a container registry in the `Snakefile`, for example `container: "oras://ghcr.io/<user>/<repository>:<version>"` for Github's container registry.
-Run the workflow with:
+To run the workflow with test files using **conda** and **singularity**:
 
 ```bash
-snakemake --cores 2 --sdm conda apptainer --directory .test
+snakemake --cores 2 --use-conda --use-singularity
 ```
 
 ## Authors
@@ -74,7 +75,7 @@ snakemake --cores 2 --sdm conda apptainer --directory .test
   - The Francis Crick Institute
   - [ORCID profile](https://orcid.org/0000-0001-5877-7945)
 
--Irene Lobon 
+- Irene Lobon 
   - AstraZeneca
   - [ORCID profile](https://orcid.org/0000-0003-1170-9915)
 
@@ -84,9 +85,4 @@ snakemake --cores 2 --sdm conda apptainer --directory .test
 
 ## TODO
 
-- Replace `<owner>` and `<repo>` everywhere in the template with the correct user name/organization, and the repository name. The workflow will be automatically added to the [snakemake workflow catalog](https://snakemake.github.io/snakemake-workflow-catalog/index.html) once it is publicly available on Github.
-- Replace `<name>` with the workflow name (can be the same as `<repo>`).
-- Replace `<description>` with a description of what the workflow does.
-- Update the [deployment](#deployment-options), [authors](#authors) and [references](#references) sections.
-- Update the `README.md` badges. Add or remove badges for `conda`/`singularity`/`apptainer` usage depending on the workflow's [deployment](#deployment-options) options.
-- Do not forget to also adjust the configuration-specific `config/README.md` file.
+

@@ -180,9 +180,28 @@ df_mutation <- df_mutation %>%
   ) %>%
   filter(!is.na(Pos), Pos > 0)
 
-# ----------------- Harmonise mutation chromosomes to BAM space (separate column) -----------------
+# ----------------- Harmonise mutation chromosomes to BAM/CRAM space (separate column) -----------------
 
-bam_targets <- names(Rsamtools::scanBamHeader(bam_file_in)[[1]]$targets)
+# Use samtools to read header; works for BAM and CRAM
+header_raw <- tryCatch(
+  system(
+    sprintf("bash -lc 'samtools view -H %s'", qpath(bam_file_in)),
+    intern = TRUE
+  ),
+  error = function(e) {
+    stop(sprintf("Failed to read BAM/CRAM header for %s via samtools: %s",
+                 bam_file_in, conditionMessage(e)))
+  }
+)
+
+sq_lines <- header_raw[grepl("^@SQ", header_raw)]
+if (length(sq_lines) == 0) {
+  stop(sprintf("No @SQ lines found in BAM/CRAM header for %s", bam_file_in))
+}
+
+# Extract SN: contig names
+bam_targets <- sub(".*SN:([^ \t]+).*", "\\1", sq_lines)
+
 bam_has_chr <- any(grepl("^chr", bam_targets))
 ref_has_chr <- any(grepl("^chr", ref_genome@user_seqnames))
 
@@ -196,7 +215,7 @@ df_mutation <- df_mutation %>%
     )
   )
 
-message(sprintf("[%s] BAM contigs example: %s",
+message(sprintf("[%s] BAM/CRAM contigs example: %s",
                 sample_name,
                 paste(head(bam_targets, 5), collapse = ", ")))
 message(sprintf("[%s] Unique mutation chromosomes (ref space): %s",
