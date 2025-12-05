@@ -1,4 +1,4 @@
-# Snakemake workflow: `pure-faf`
+# <sub><img width="64" height="64" alt="pure-faf logo" src="https://github.com/user-attachments/assets/4d3d9fa3-e90b-4c81-94b9-339cef5ba99d" /></sub> Snakemake workflow: `pure-faf`
 
 [![Snakemake](https://img.shields.io/badge/snakemake-≥8.0.0-brightgreen.svg)](https://snakemake.github.io)
 [![GitHub actions status](https://github.com/rabiafidan/pure-faf/workflows/Tests/badge.svg?branch=main)](https://github.com/rabiafidan/pure-faf/actions?query=branch%3Amain+workflow%3ATests)
