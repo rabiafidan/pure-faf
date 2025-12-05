@@ -1,6 +1,6 @@
 ## Workflow overview
 
-This workflow is a best-practice workflow for variant filetering of formalin fixed tumour samples.
+This workflow is a best-practice workflow for variant filtering of formalin fixed tumour samples.
 The workflow is built using [snakemake](https://snakemake.readthedocs.io/en/stable/) and consists of the following steps:
 
 1. Annotating rhe VCF with a custom panel of normals (PON)

@@ -10,20 +10,20 @@ A Snakemake workflow for `VCF purification through formalin artefact filtering`
 ## Authors
 
 - Fatma Rabia Fidan Baş
-  - The Francis Crick Institute
-  - [ORCID profile](https://orcid.org/0000-0001-5877-7945)
+    - The Francis Crick Institute
+    - [ORCID profile](https://orcid.org/0000-0001-5877-7945)
 
 - Brian Hanley
-  - The Francis Crick Institute
-  - [ORCID profile](https://orcid.org/0000-0001-5877-7945)
+    - The Francis Crick Institute
+    - [ORCID profile](https://orcid.org/0000-0001-5877-7945)
 
 - Husayn Pallikonda
-  - The Francis Crick Institute
-  - [ORCID profile](https://orcid.org/0000-0001-5877-7945)
+    - The Francis Crick Institute
+    - [ORCID profile](https://orcid.org/0000-0001-5877-7945)
 
 - Irene Lobon 
-  - AstraZeneca
-  - [ORCID profile](https://orcid.org/0000-0003-1170-9915)
+    - AstraZeneca
+    - [ORCID profile](https://orcid.org/0000-0003-1170-9915)
 
 ## References
 
