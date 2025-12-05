@@ -41,7 +41,7 @@ pip install snakemake-executor-plugin-slurm
 ```
 ### 1) clone the repository
 ```bash
-https://github.com/rabiafidan/pure-faf.git
+git clone https://github.com/rabiafidan/pure-faf.git
 ```
 To run the workflow from command line, change the working directory.
 

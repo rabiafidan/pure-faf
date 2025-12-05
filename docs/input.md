@@ -1,30 +1,11 @@
-## Workflow overview
-
-This workflow is a best-practice workflow for variant filetering of formalin fixed tumour samples.
-The workflow is built using [snakemake](https://snakemake.readthedocs.io/en/stable/) and consists of the following steps:
-
-1. Annotating rhe VCF with a custom panel of normals (PON)
-2. Applying a general quality filter with creteria including PON, AD and ROQ
-3. Splitting variants into confidence tiers using an AD threshold
-4. Intersecting low-confidence indels with a second tool's indel calls. Intersection is indel type-specific (insertion or deletion), and only position-based (alt allele doesn't matter).
-5. Running microsec twice with different parameters for low-confidence and high-confidence tiers
-6. Merging the results back annotating VCF with microsec results
-7. Applyying different filtering methods on the annotated VCF
-8. Applying a post-filter VAF filter 
-9. Quality control using FFPEsig repaired and unrepaired signatures
-
-See the [worflow diagram](README.md).
-
-## Running the workflow
-
-### Input data
-You need these following files:
+# Input data
+### You need these following files:
 1. Mutect2 VCF files (with AD, DP and ROQ annotations)
 2. Strelka2 indel VCF (or any other secondary variant caller should theoratically work)
 3. Sample bam/cram file
 4. Human reference genome fasta you used for alignment and variant calling
 
-You need the following information:
+### You need the following information:
 1. tumour and normal sample names
 2. Sequencing read length
 3. Sequencing adapters
@@ -66,23 +47,3 @@ All parameters except exclude_samples are mandatory.
 | **Other parameters**              |      |                                                                                                   |                                |
 | odir                              | str  | output directory. This will appear under results/                                                 |                                |
 | exclude_samples                   | array| a list of sample names you want to exclude from the analysis. Default is empty list.              |                                |                   
-
-### Output
-```bash
-results/odir/
-    ├── logs
-        ├── 1-step1_sample1.log
-        ├── 2-step2_sample1.log
-        ├── ...
-    ├── filtered_vcf #MAIN OUTPUT FOLDER
-        ├── 1-sample1_msec_all_filtered.vcf.gz #passing all microsec filters
-        ├── 1-sample2_vault_filtered.vcf.gz #filtering creteria used in VAULT paper
-        ├── 1-sample1__vault_plus_SR_filtered.vcf.gz #VAULT createria + simple repeat filter (relevant if whole genome data, otherwise almost no difference)
-        ├── 2-..... #various VAF filtered VCFs
-        ├── 2-..... #various VAF filtered VCFs
-    ├── microsec_input # sample info and mutation info files for microsec
-    ├── microsec_output #microsec tsv output files for samples and tiers
-    ├── ffpe_sig #QC plots and tables using FFPEsig repaired and unrepaired signatures
-    ├── temp # intermediate files. Most is automatically deleted after workflow completion. Remaining ones may be useful or can be deleted manually.
-    └── PON # custom RepSeq panel of normals annotation and beta distribution testing results. Kind of intermediate, can be deleted if not needed.
-```

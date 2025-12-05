@@ -1,0 +1,13 @@
+nav:
+  - Home: index.md
+  - pure-faf method: pure-faf-method.md
+  - Inputs: input.md
+  - Outputs: output.md
+  - Installation and Usage:
+      - Overview: usage/general_usage.md
+      - Usage within the Francis Crick Institute: usage/crick_usage.md
+      - Usage within the Turajlic lab: usage/turajlic_lab_usage.md
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/favicon.ico
