@@ -21,7 +21,7 @@ Using the input files and information, you need to create a sample sheet as foll
 
 ### Parameters
 
-You then need to configure the workflow by updating the [config/config.yaml](config/config.yaml).
+You then need to configure the workflow by updating the [config/config.yaml](https://github.com/rabiafidan/pure-faf/blob/main/config/config.yaml).
 This table lists all parameters that can be used to run the workflow.
 All parameters except exclude_samples are mandatory.
 

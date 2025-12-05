@@ -2,7 +2,6 @@
 
 The usage of this workflow is described in the [Snakemake Workflow Catalog](https://snakemake.github.io/snakemake-workflow-catalog/docs/workflows/rabiafidan/pure-faf).
 
-Detailed information about input data and workflow configuration can also be found in the [`config/README.md`](config/README.md).
 
 If you use this workflow in a paper, don't forget to give credits to the authors by citing the URL of this repository or its DOI.
 
