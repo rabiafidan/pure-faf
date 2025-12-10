@@ -549,6 +549,21 @@ rule microsec_annotate:
         echo "----------------------------------------------" >> {log} 2>&1 &&
         date >> {log} 2>&1 &&
 
+        #0 ) check microsec output column names
+        expected_header=$'Sample\tMut_type\tChr\tPos\tRef\tAlt\tSimpleRepeat_TRF\tNeighborhood_sequence\tpercent_Alt\tsum_AD\tChr_original\tChr_bam\tread_length\ttotal_read\tsoft_clipped_read\tflag_hairpin\tpre_support_length\tpost_support_length\tshort_support_length\tpre_farthest\tpost_farthest\tlow_quality_base_rate_under_q18\tlow_quality_pre\tlow_quality_post\tdistant_homology_rate\tsoft_clipped_rate\tprob_filter_1\tprob_filter_3_pre\tprob_filter_3_post\tfilter_1_mutation_intra_hairpin_loop\tfilter_2_hairpin_structure\tfilter_3_microhomology_induced_mutation\tfilter_4_highly_homologous_region\tfilter_5_soft_clipped_reads\tfilter_6_simple_repeat\tfilter_7_mutation_at_homopolymer\tfilter_8_low_quality\tmsec_filter_123\tmsec_filter_1234\tmsec_filter_all\tcomment'
+        echo "expected_header: $expected_header" >> {log} 2>&1
+
+        actual_header=$(zcat {input.microsec} | sed -n '1p')
+
+        if [ "$actual_header" != "$expected_header" ]; then
+            echo "[microsec_annotate] ERROR: MicroSEC TSV header mismatch!" >> {log} 2>&1
+            echo "[microsec_annotate] Expected header:" >> {log} 2>&1
+            echo "[microsec_annotate]   $expected_header" >> {log} 2>&1
+            echo "[microsec_annotate] Got header:" >> {log} 2>&1
+            echo "[microsec_annotate]   $actual_header" >> {log} 2>&1
+            exit 1
+        fi
+
         # 1) Empty split VCF -> passthrough (already empty)
         if [ "$(bcftools view -H {input.v} | head -n1 | wc -l)" -eq 0 ]; then
             echo "[microsec_annotate] Split VCF is empty; passing through unchanged." >> {log} 2>&1
@@ -586,7 +601,7 @@ rule microsec_annotate:
         bcftools annotate \
             --write-index --threads {threads} \
             -a {output.microsec_output_2} \
-            -c -,-,CHROM,POS,-,-,-,-,-,-,-,-,msec_alt_AD,-,-,-,-,-,-,-,-,-,-,-,-,-,-,-,filter_1_mutation_intra_hairpin_loop,filter_2_hairpin_structure,filter_3_microhomology_induced_mutation,filter_4_highly_homologous_region,filter_5_soft_clipped_reads,filter_6_simple_repeat,filter_7_mutation_at_homopolymer,filter_8_low_quality,msec_filter_123,msec_filter_1234,msec_filter_all,- \
+            -c -,-,CHROM,POS,REF,ALT,-,-,-,msec_alt_AD,-,-,-,-,-,-,-,-,-,-,-,-,-,-,-,-,-,-,-,filter_1_mutation_intra_hairpin_loop,filter_2_hairpin_structure,filter_3_microhomology_induced_mutation,filter_4_highly_homologous_region,filter_5_soft_clipped_reads,filter_6_simple_repeat,filter_7_mutation_at_homopolymer,filter_8_low_quality,msec_filter_123,msec_filter_1234,msec_filter_all,comment \
             -h {input.header} \
             {input.v} -Oz -o {output.v} >> {log} 2>&1
         """

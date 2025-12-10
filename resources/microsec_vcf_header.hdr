@@ -10,4 +10,4 @@
 ##INFO=<ID=msec_filter_1234,Number=1,Type=String,Description="Composite flag summarising Filters 1–4 (FFPE + distant homology). 'Artifact suspicious' if any triggered; empty if clean.">
 ##INFO=<ID=msec_filter_all,Number=1,Type=String,Description="Composite flag summarising all 8 MicroSEC filters. 'Artifact suspicious' if any triggered; empty if clean.">
 ##INFO=<ID=msec_alt_AD,Number=1,Type=Integer,Description="MicroSEC recalculated mutation-supporting read count (ALT-supporting reads after artifact filtering).">
-
+##INFO=<ID=comment,Number=1,Type=String,Description="comment field in microsec output.">

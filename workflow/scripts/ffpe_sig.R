@@ -317,10 +317,10 @@ for (i in seq_len(n_steps)) {
     nvar <- variant_counts[i, j]
     
     if (!is.na(cs_u) && !is.na(nvar)) {
-      numbers_unrepaired[i, j] <- sprintf("%.2f (%d vars)", cs_u, as.integer(nvar))
+      numbers_unrepaired[i, j] <- sprintf("%.2f (%d snvs)", cs_u, as.integer(nvar))
     }
     if (!is.na(cs_r) && !is.na(nvar)) {
-      numbers_repaired[i, j] <- sprintf("%.2f (%d vars)", cs_r, as.integer(nvar))
+      numbers_repaired[i, j] <- sprintf("%.2f (%d snvs)", cs_r, as.integer(nvar))
     }
   }
 }
@@ -332,7 +332,7 @@ for (i in seq_len(n_steps)) {
 
 h1 <- pheatmap(
   sim_unrepaired,
-  main            = "Cosine similarity to FFPE Unrepaired signature\n(labels: cosine - #variants)",
+  main            = "Cosine similarity to FFPE Unrepaired signature\n(labels: cosine similarity (number of snvs))",
   cluster_rows    = FALSE,
   cluster_cols    = FALSE,
   display_numbers = numbers_unrepaired,
@@ -343,7 +343,7 @@ h1 <- pheatmap(
 
 h2 <- pheatmap(
   sim_repaired,
-  main            = "Cosine similarity to FFPE Repaired signature\n(labels: cosine - #variants)",
+  main            = "Cosine similarity to FFPE Repaired signature\n(labels: cosine similarity (number of snvs))",
   cluster_rows    = FALSE,
   cluster_cols    = FALSE,
   display_numbers = numbers_repaired,
