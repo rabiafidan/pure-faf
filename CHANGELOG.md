@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.0 (2026-11-24)
+
+
+### Features
+
+* deepsomatic intersect filter ([4e2e0ba](https://github.com/rabiafidan/pure-faf/commit/4e2e0ba6aaa479f0b6eda851ad1c44ac59aa5027))
+
 ## [2.0.0](https://github.com/rabiafidan/pure-faf/compare/v1.1...lincolnxu326:pure-faf:features/deepsomatic-intersect-filter) (2026-03-02)
 
 ### Features
