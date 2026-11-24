@@ -7,7 +7,7 @@
 
 A Snakemake workflow for `VCF purification through formalin artefact filtering`
 
-<img width="2560" height="1440" alt="pure-faf_workflow" src="https://github.com/user-attachments/assets/c470b105-4ee2-48bd-a638-5fe70578a8bb" />
+<img width="3840" height="2160" alt="pure-faf_workflow_updated" src="https://github.com/user-attachments/assets/395d9bd1-63a3-45c8-a570-49e48a104654" />
 
 
 - [Snakemake workflow: `pure-faf`](#pure-faf)
@@ -27,6 +27,7 @@ See the [documentation](https://rabiafidan.github.io/pure-faf) for detailed info
 The usage of this workflow is described in the [Snakemake Workflow Catalog](https://snakemake.github.io/snakemake-workflow-catalog/docs/workflows/rabiafidan/pure-faf).
 
 Detailed information about input data and workflow configuration can also be found in the [`config/README.md`](config/README.md).
+
 
 If you use this workflow in a paper, don't forget to give credits to the authors by citing the URL of this repository or its DOI.
 
@@ -86,6 +87,10 @@ snakemake --cores 2 --use-conda --use-singularity
 - Irene Lobon 
   - AstraZeneca
   - [ORCID profile](https://orcid.org/0000-0003-1170-9915)
+
+- Lincoln Xu
+  - The Francis Crick Institute
+  -[ORCID profile](https://orcid.org/0009-0007-8015-2600)
 
 ## References
 
